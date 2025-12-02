@@ -2,13 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===== APPLE SQUIRCLE DESIGN SYSTEM ===== */
+/*
+ * Following Apple's "closer to the human, the rounder it is" principle
+ * Target: iPhone-like roundness (31-34%) for this interactive overlay app
+ * Superellipse formula: |x/a|^n + |y/b|^n = 1 where n≈5 creates squircle
+ */
+
+:root {
+	/* Squircle smoothing factor (Apple uses ~0.6) */
+	--squircle-smooth: 0.6;
+
+	/* Roundness scale based on Apple's formula */
+	--radius-xs: 4px;      /* Inline code, tiny elements */
+	--radius-sm: 8px;      /* Code blocks, tables */
+	--radius-md: 12px;     /* Buttons, inputs, chat messages */
+	--radius-lg: 16px;     /* Cards, primary containers */
+	--radius-xl: 20px;     /* Glass-card, main surfaces */
+	--radius-2xl: 24px;    /* Hero elements, modals */
+	--radius-full: 9999px; /* Pills, circular icons */
+}
+
+/* Squircle size variant classes */
+.squircle-xs { border-radius: var(--radius-xs); }
+.squircle-sm { border-radius: var(--radius-sm); }
+.squircle-md { border-radius: var(--radius-md); }
+.squircle-lg { border-radius: var(--radius-lg); }
+.squircle-xl { border-radius: var(--radius-xl); }
+.squircle-2xl { border-radius: var(--radius-2xl); }
+
 /* Liquid Glass Effect Base */
 .liquid-glass {
 	background: rgba(255, 255, 255, 0.25);
 	backdrop-filter: blur(16px) saturate(180%) brightness(120%);
 	-webkit-backdrop-filter: blur(16px) saturate(180%) brightness(120%);
 	border: 2px solid rgba(255, 255, 255, 0.3);
-	border-radius: 1rem;
+	border-radius: var(--radius-lg);
 	box-shadow:
 		0 8px 32px rgba(0, 0, 0, 0.2),
 		inset 0 1px 0 rgba(255, 255, 255, 0.3),
@@ -56,7 +85,7 @@
 	cursor: move;
 	position: relative;
 	z-index: 1000;
-	border-radius: 1rem 1rem 0 0;
+	border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
 /* Make sure buttons and interactive elements are not draggable */
@@ -127,7 +156,7 @@ textarea,
 	backdrop-filter: blur(16px) saturate(180%) brightness(120%);
 	-webkit-backdrop-filter: blur(16px) saturate(180%) brightness(120%);
 	border: 2px solid rgba(255, 255, 255, 0.3);
-	border-radius: 1rem;
+	border-radius: var(--radius-lg);
 	box-shadow:
 		0 8px 32px rgba(0, 0, 0, 0.2),
 		inset 0 1px 0 rgba(255, 255, 255, 0.3),
@@ -161,7 +190,7 @@ textarea,
 /* Glass card with tint for visibility */
 .glass-card {
 	background: rgba(255, 255, 255, 0.12);
-	border-radius: 20px;
+	border-radius: var(--radius-xl);
 	border: 1px solid rgba(255, 255, 255, 0.35);
 	box-shadow:
 		0 8px 32px rgba(0, 0, 0, 0.15),
@@ -209,7 +238,7 @@ textarea,
 /* Dark tinted variant for better text contrast */
 .glass-card-dark {
 	background: rgba(30, 30, 40, 0.75);
-	border-radius: 20px;
+	border-radius: var(--radius-xl);
 	border: 1px solid rgba(255, 255, 255, 0.15);
 	box-shadow:
 		0 8px 32px rgba(0, 0, 0, 0.3),
@@ -224,7 +253,7 @@ textarea,
 /* Light tinted variant */
 .glass-card-light {
 	background: rgba(255, 255, 255, 0.25);
-	border-radius: 16px;
+	border-radius: var(--radius-lg);
 	border: 1px solid rgba(255, 255, 255, 0.4);
 	backdrop-filter: blur(12px);
 	-webkit-backdrop-filter: blur(12px);
@@ -233,17 +262,19 @@ textarea,
 /* ===== CHAT MESSAGE STYLES ===== */
 
 .chat-message-user {
-	background: rgba(59, 130, 246, 0.8);
+	background: rgba(59, 130, 246, 0.55);
 	color: white;
-	border-radius: 12px;
+	border-radius: var(--radius-md);
+	border: 1px solid rgba(59, 130, 246, 0.3);
 	backdrop-filter: blur(8px);
 	-webkit-backdrop-filter: blur(8px);
 }
 
 .chat-message-assistant {
-	background: rgba(255, 255, 255, 0.9);
+	background: rgba(255, 255, 255, 0.45);
 	color: rgba(30, 30, 40, 0.95);
-	border-radius: 12px;
+	border-radius: var(--radius-md);
+	border: 1px solid rgba(255, 255, 255, 0.3);
 	backdrop-filter: blur(8px);
 	-webkit-backdrop-filter: blur(8px);
 }
@@ -293,14 +324,14 @@ textarea,
 .prose-glass code {
 	background: rgba(0, 0, 0, 0.3);
 	padding: 0.2em 0.4em;
-	border-radius: 4px;
+	border-radius: var(--radius-xs);
 	font-size: 0.9em;
 	font-family: "SF Mono", "Monaco", "Menlo", monospace;
 }
 
 .prose-glass pre {
 	background: rgba(0, 0, 0, 0.4);
-	border-radius: 8px;
+	border-radius: var(--radius-sm);
 	padding: 1em;
 	overflow-x: auto;
 	margin-bottom: 1em;
@@ -333,6 +364,39 @@ textarea,
 	color: rgba(255, 255, 255, 0.98);
 }
 
+/* Table styles for prose-glass */
+.prose-glass table {
+	width: 100%;
+	border-collapse: collapse;
+	border-radius: var(--radius-sm);
+	overflow: hidden;
+	background: rgba(0, 0, 0, 0.15);
+	margin: 0.75em 0;
+}
+
+.prose-glass th {
+	background: rgba(0, 0, 0, 0.2);
+	padding: 0.75em 1em;
+	text-align: left;
+	font-weight: 600;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+	color: rgba(255, 255, 255, 0.95);
+}
+
+.prose-glass td {
+	padding: 0.75em 1em;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	color: rgba(255, 255, 255, 0.85);
+}
+
+.prose-glass tr:last-child td {
+	border-bottom: none;
+}
+
+.prose-glass tr:hover {
+	background: rgba(255, 255, 255, 0.05);
+}
+
 /* Dark prose variant for light backgrounds */
 .prose-dark {
 	color: rgba(30, 30, 40, 0.95);
@@ -355,6 +419,40 @@ textarea,
 
 .prose-dark a {
 	color: rgba(59, 130, 246, 1);
+}
+
+/* Table styles for prose-dark */
+.prose-dark table {
+	width: 100%;
+	border-collapse: collapse;
+	border-radius: var(--radius-sm);
+	overflow: hidden;
+	background: rgba(0, 0, 0, 0.05);
+	border: 1px solid rgba(0, 0, 0, 0.1);
+	margin: 0.75em 0;
+}
+
+.prose-dark th {
+	background: rgba(0, 0, 0, 0.08);
+	padding: 0.75em 1em;
+	text-align: left;
+	font-weight: 600;
+	border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+	color: rgba(30, 30, 40, 0.95);
+}
+
+.prose-dark td {
+	padding: 0.75em 1em;
+	border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+	color: rgba(30, 30, 40, 0.85);
+}
+
+.prose-dark tr:last-child td {
+	border-bottom: none;
+}
+
+.prose-dark tr:hover {
+	background: rgba(0, 0, 0, 0.03);
 }
 
 /* ===== LOADING INDICATOR (NON-PULSING) ===== */

@@ -76,7 +76,7 @@ const SolutionSection = ({
 						padding: "1rem",
 						whiteSpace: "pre-wrap",
 						wordBreak: "break-all",
-						borderRadius: "12px",
+						borderRadius: "8px" /* --radius-sm */,
 					}}
 					wrapLongLines={true}
 				>

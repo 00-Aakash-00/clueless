@@ -2,6 +2,7 @@ import type React from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { dracula } from "react-syntax-highlighter/dist/esm/styles/prism";
+import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 
 interface MarkdownRendererProps {
@@ -26,6 +27,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 		<div className={`${proseClass} ${className}`}>
 			<ReactMarkdown
 				remarkPlugins={[remarkGfm]}
+				rehypePlugins={[rehypeRaw]}
 				components={{
 					code({ node, className: codeClassName, children, ...props }) {
 						const match = /language-(\w+)/.exec(codeClassName || "");
@@ -147,6 +149,71 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 					// Custom strong/bold
 					strong({ children }) {
 						return <strong style={{ fontWeight: 600 }}>{children}</strong>;
+					},
+					// Table components
+					table({ children }) {
+						return (
+							<div style={{ overflowX: "auto", margin: "0.75em 0" }}>
+								<table
+									style={{
+										width: "100%",
+										borderCollapse: "collapse",
+										fontSize: "0.9em",
+										borderRadius: "8px",
+										overflow: "hidden",
+									}}
+								>
+									{children}
+								</table>
+							</div>
+						);
+					},
+					thead({ children }) {
+						return (
+							<thead style={{ background: "rgba(0, 0, 0, 0.2)" }}>
+								{children}
+							</thead>
+						);
+					},
+					tbody({ children }) {
+						return <tbody>{children}</tbody>;
+					},
+					tr({ children }) {
+						return (
+							<tr
+								style={{
+									borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
+								}}
+							>
+								{children}
+							</tr>
+						);
+					},
+					th({ children }) {
+						return (
+							<th
+								style={{
+									padding: "0.75em 1em",
+									textAlign: "left",
+									fontWeight: 600,
+									color: "rgba(255, 255, 255, 0.95)",
+								}}
+							>
+								{children}
+							</th>
+						);
+					},
+					td({ children }) {
+						return (
+							<td
+								style={{
+									padding: "0.75em 1em",
+									color: "rgba(255, 255, 255, 0.85)",
+								}}
+							>
+								{children}
+							</td>
+						);
 					},
 				}}
 			>
