@@ -105,22 +105,24 @@ export class ProcessingHelper {
         return
       }
 
+      // Early guard: Check prerequisites BEFORE starting debug
+      const problemInfo = this.appState.getProblemInfo()
+      const oldCode = this.appState.getCurrentSolutionCode()
+      if (!problemInfo || !oldCode) {
+        console.log("Missing prerequisites for debug, resetting to queue")
+        this.appState.setView("queue")
+        mainWindow.webContents.send(
+          this.appState.PROCESSING_EVENTS.INITIAL_SOLUTION_ERROR,
+          "No solution to debug. Please take screenshots and process first."
+        )
+        return
+      }
+
       mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.DEBUG_START)
       this.currentExtraProcessingAbortController = new AbortController()
       const debugSignal = this.currentExtraProcessingAbortController.signal
 
       try {
-        // Get problem info and current solution
-        const problemInfo = this.appState.getProblemInfo()
-        if (!problemInfo) {
-          throw new Error("No problem info available")
-        }
-
-        // Get stored solution code (don't regenerate - use what was displayed)
-        const oldCode = this.appState.getCurrentSolutionCode()
-        if (!oldCode) {
-          throw new Error("No current solution available for debugging")
-        }
 
         // Debug the solution using vision model
         const debugResult = await this.llmHelper.debugSolutionWithImages(
