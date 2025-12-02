@@ -1,6 +1,7 @@
 {
-  "name": "interview-coder",
+  "name": "clueless",
   "version": "1.0.0",
+  "description": "The invisible desktop AI assistant for meetings, interviews, and presentations",
   "main": "./dist-electron/main.js",
   "scripts": {
     "clean": "rimraf dist dist-electron",
@@ -17,8 +18,8 @@
     "dist": "npm run app:build"
   },
   "build": {
-    "appId": "com.electron.meeting-notes",
-    "productName": "Meeting Notes Coder",
+    "appId": "com.clueless.app",
+    "productName": "Clueless",
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
@@ -96,14 +97,13 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "ibttf",
-        "repo": "interview-coder-frontend"
+        "owner": "00-Aakash-00",
+        "repo": "clueless"
       }
     ]
   },
-  "keywords": [],
-  "author": "",
-  "description": "",
+  "keywords": ["ai-assistant", "electron", "groq", "screenshot-analysis", "meeting-helper"],
+  "author": "Aakash",
   "devDependencies": {
     "@types/color": "^4.2.0",
     "@types/diff": "^6.0.0",

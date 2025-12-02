@@ -1,6 +1,6 @@
-# Cluely
+# Clueless
 
-[Cluely](https://cluely.com) - The invisible desktop assistant that provides real-time insights, answers, and support during meetings, interviews, presentations, and professional conversations.
+The invisible desktop AI assistant that provides real-time insights, answers, and support during meetings, interviews, presentations, and professional conversations. Powered by Groq Cloud for ultra-fast inference.
 
 ## 🚀 Quick Start Guide
 
@@ -85,8 +85,8 @@ npm run dist
 ### macOS Permissions
 
 On first run, you may need to grant permissions:
-1. **Screen Recording**: System Preferences → Privacy & Security → Screen Recording → Enable for Cluely
-2. **Accessibility** (optional): System Preferences → Privacy & Security → Accessibility → Enable for Cluely
+1. **Screen Recording**: System Preferences → Privacy & Security → Screen Recording → Enable for Clueless
+2. **Accessibility** (optional): System Preferences → Privacy & Security → Accessibility → Enable for Clueless
 
 ---
 
@@ -377,7 +377,7 @@ This project welcomes contributions!
 
 ---
 
-**Star this repo if Free Cluely helps you succeed in meetings, interviews, or presentations!**
+**Star this repo if Clueless helps you succeed in meetings, interviews, or presentations!**
 
 ### Tags
 
