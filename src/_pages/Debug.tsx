@@ -224,9 +224,6 @@ const Debug: React.FC<DebugProps> = ({ isProcessing, setIsProcessing }) => {
 		variant: "neutral",
 	});
 
-	const [isTooltipVisible, setIsTooltipVisible] = useState(false);
-	const [tooltipHeight, setTooltipHeight] = useState(0);
-
 	const { data: extraScreenshots = [], refetch } = useQuery({
 		queryKey: ["extras"],
 		queryFn: async () => {
@@ -312,11 +309,8 @@ const Debug: React.FC<DebugProps> = ({ isProcessing, setIsProcessing }) => {
 		// Set up resize observer
 		const updateDimensions = () => {
 			if (contentRef.current) {
-				let contentHeight = contentRef.current.scrollHeight;
+				const contentHeight = contentRef.current.scrollHeight;
 				const contentWidth = contentRef.current.scrollWidth;
-				if (isTooltipVisible) {
-					contentHeight += tooltipHeight;
-				}
 				window.electronAPI.updateContentDimensions({
 					width: contentWidth,
 					height: contentHeight,
@@ -336,19 +330,7 @@ const Debug: React.FC<DebugProps> = ({ isProcessing, setIsProcessing }) => {
 				cleanup();
 			}
 		};
-	}, [
-		queryClient,
-		isTooltipVisible,
-		refetch,
-		setIsProcessing,
-		showToast,
-		tooltipHeight,
-	]);
-
-	const handleTooltipVisibilityChange = (visible: boolean, height: number) => {
-		setIsTooltipVisible(visible);
-		setTooltipHeight(height);
-	};
+	}, [queryClient, refetch, setIsProcessing, showToast]);
 
 	return (
 		<div ref={contentRef} className="relative space-y-3 px-4 py-3 ">
@@ -376,10 +358,7 @@ const Debug: React.FC<DebugProps> = ({ isProcessing, setIsProcessing }) => {
 			</div>
 
 			{/* Navbar of commands with the tooltip */}
-			<ExtraScreenshotsQueueHelper
-				extraScreenshots={extraScreenshots}
-				onTooltipVisibilityChange={handleTooltipVisibilityChange}
-			/>
+			<ExtraScreenshotsQueueHelper extraScreenshots={extraScreenshots} />
 
 			{/* Main Content */}
 			<div className="w-full text-sm glass-card-dark">

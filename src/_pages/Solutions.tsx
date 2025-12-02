@@ -150,9 +150,6 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 		variant: "neutral",
 	});
 
-	const [isTooltipVisible, setIsTooltipVisible] = useState(false);
-	const [tooltipHeight, setTooltipHeight] = useState(0);
-
 	const [isResetting, setIsResetting] = useState(false);
 
 	const { data: extraScreenshots = [], refetch } = useQuery<
@@ -205,11 +202,8 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 		// Height update logic
 		const updateDimensions = () => {
 			if (contentRef.current) {
-				let contentHeight = contentRef.current.scrollHeight;
+				const contentHeight = contentRef.current.scrollHeight;
 				const contentWidth = contentRef.current.scrollWidth;
-				if (isTooltipVisible) {
-					contentHeight += tooltipHeight;
-				}
 				window.electronAPI.updateContentDimensions({
 					width: contentWidth,
 					height: contentHeight,
@@ -335,11 +329,9 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 			}
 		};
 	}, [
-		isTooltipVisible,
-		tooltipHeight,
 		queryClient.getQueryData,
 		queryClient.removeQueries,
-		queryClient.setQueryData, // Reset other states
+		queryClient.setQueryData,
 		refetch,
 		setView,
 		showToast,
@@ -373,11 +365,6 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 		});
 		return () => unsubscribe();
 	}, [queryClient]);
-
-	const handleTooltipVisibilityChange = (visible: boolean, height: number) => {
-		setIsTooltipVisible(visible);
-		setTooltipHeight(height);
-	};
 
 	return (
 		<>
@@ -414,10 +401,7 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 					)}
 
 					{/* Navbar of commands with the SolutionsHelper */}
-					<SolutionCommands
-						extraScreenshots={extraScreenshots}
-						onTooltipVisibilityChange={handleTooltipVisibilityChange}
-					/>
+					<SolutionCommands extraScreenshots={extraScreenshots} />
 
 					{/* Main Content - Modified width constraints */}
 					<div className="w-full text-sm glass-card-dark">

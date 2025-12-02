@@ -27,8 +27,6 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 		variant: "neutral",
 	});
 
-	const [isTooltipVisible, setIsTooltipVisible] = useState(false);
-	const [tooltipHeight, setTooltipHeight] = useState(0);
 	const contentRef = useRef<HTMLDivElement>(null);
 
 	const [chatInput, setChatInput] = useState("");
@@ -135,11 +133,8 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 	useEffect(() => {
 		const updateDimensions = () => {
 			if (contentRef.current) {
-				let contentHeight = contentRef.current.scrollHeight;
+				const contentHeight = contentRef.current.scrollHeight;
 				const contentWidth = contentRef.current.scrollWidth;
-				if (isTooltipVisible) {
-					contentHeight += tooltipHeight;
-				}
 				window.electronAPI.updateContentDimensions({
 					width: contentWidth,
 					height: contentHeight,
@@ -180,7 +175,7 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 				cleanup();
 			}
 		};
-	}, [isTooltipVisible, tooltipHeight, refetch, setView, showToast]);
+	}, [refetch, setView, showToast]);
 
 	// Seamless screenshot-to-LLM flow
 	useEffect(() => {
@@ -221,11 +216,6 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 			unsubscribe?.();
 		};
 	}, [refetch]);
-
-	const handleTooltipVisibilityChange = (visible: boolean, height: number) => {
-		setIsTooltipVisible(visible);
-		setTooltipHeight(height);
-	};
 
 	const handleChatToggle = () => {
 		setIsChatOpen(!isChatOpen);
@@ -270,7 +260,6 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 					<div className="w-fit">
 						<QueueCommands
 							screenshots={screenshots}
-							onTooltipVisibilityChange={handleTooltipVisibilityChange}
 							onChatToggle={handleChatToggle}
 							onSettingsToggle={handleSettingsToggle}
 						/>
