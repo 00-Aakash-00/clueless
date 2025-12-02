@@ -2,7 +2,7 @@
 
 import { diffLines } from "diff";
 import type React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "react-query";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { dracula } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -242,14 +242,13 @@ const Debug: React.FC<DebugProps> = ({ isProcessing, setIsProcessing }) => {
 		cacheTime: Infinity,
 	});
 
-	const showToast = (
-		title: string,
-		description: string,
-		variant: ToastVariant,
-	) => {
-		setToastMessage({ title, description, variant });
-		setToastOpen(true);
-	};
+	const showToast = useCallback(
+		(title: string, description: string, variant: ToastVariant) => {
+			setToastMessage({ title, description, variant });
+			setToastOpen(true);
+		},
+		[],
+	);
 
 	const handleDeleteExtraScreenshot = async (index: number) => {
 		const screenshotToDelete = extraScreenshots[index];
@@ -333,7 +332,9 @@ const Debug: React.FC<DebugProps> = ({ isProcessing, setIsProcessing }) => {
 
 		return () => {
 			resizeObserver.disconnect();
-			cleanupFunctions.forEach((cleanup) => cleanup());
+			for (const cleanup of cleanupFunctions) {
+				cleanup();
+			}
 		};
 	}, [
 		queryClient,
@@ -392,7 +393,10 @@ const Debug: React.FC<DebugProps> = ({ isProcessing, setIsProcessing }) => {
 									<div className="space-y-3">
 										<div className="space-y-1">
 											{thoughtsData.map((thought, index) => (
-												<div key={index} className="flex items-start gap-2">
+												<div
+													key={`thought-${index}-${thought.substring(0, 20)}`}
+													className="flex items-start gap-2"
+												>
 													<div className="w-1 h-1 rounded-full bg-blue-400/80 mt-2 shrink-0" />
 													<div>{thought}</div>
 												</div>

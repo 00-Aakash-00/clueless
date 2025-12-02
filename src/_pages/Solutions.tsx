@@ -1,6 +1,6 @@
 // Solutions.tsx
 import type React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "react-query";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { dracula } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -175,14 +175,13 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 		},
 	);
 
-	const showToast = (
-		title: string,
-		description: string,
-		variant: ToastVariant,
-	) => {
-		setToastMessage({ title, description, variant });
-		setToastOpen(true);
-	};
+	const showToast = useCallback(
+		(title: string, description: string, variant: ToastVariant) => {
+			setToastMessage({ title, description, variant });
+			setToastOpen(true);
+		},
+		[],
+	);
 
 	const handleDeleteExtraScreenshot = async (index: number) => {
 		const screenshotToDelete = extraScreenshots[index];
@@ -331,7 +330,9 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 
 		return () => {
 			resizeObserver.disconnect();
-			cleanupFunctions.forEach((cleanup) => cleanup());
+			for (const cleanup of cleanupFunctions) {
+				cleanup();
+			}
 		};
 	}, [
 		isTooltipVisible,
@@ -456,7 +457,7 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 																<div className="space-y-1">
 																	{thoughtsData.map((thought, index) => (
 																		<div
-																			key={index}
+																			key={`thought-${index}-${thought.substring(0, 20)}`}
 																			className="flex items-start gap-2"
 																		>
 																			<div className="w-1 h-1 rounded-full bg-blue-400/80 mt-2 shrink-0" />

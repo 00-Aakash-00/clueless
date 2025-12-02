@@ -17,7 +17,7 @@ const ScreenshotQueue: React.FC<ScreenshotQueueProps> = ({
 	onDeleteScreenshot,
 }) => {
 	if (screenshots.length === 0) {
-		return <></>;
+		return null;
 	}
 
 	const displayScreenshots = screenshots.slice(0, 5);

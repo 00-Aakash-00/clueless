@@ -41,12 +41,12 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
 				<div className="flex items-center gap-2">
 					<span className="text-[11px] leading-none">Show/Hide</span>
 					<div className="flex gap-1">
-						<button className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+						<span className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
 							⌘
-						</button>
-						<button className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+						</span>
+						<span className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
 							B
-						</button>
+						</span>
 					</div>
 				</div>
 
@@ -55,12 +55,12 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
 					<div className="flex items-center gap-2">
 						<span className="text-[11px] leading-none">Solve</span>
 						<div className="flex gap-1">
-							<button className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+							<span className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
 								⌘
-							</button>
-							<button className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+							</span>
+							<span className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
 								↵
-							</button>
+							</span>
 						</div>
 					</div>
 				)}
@@ -90,6 +90,7 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
 				{/* Question mark with tooltip */}
 				<div
 					className="relative inline-block"
+					role="tooltip"
 					onMouseEnter={handleMouseEnter}
 					onMouseLeave={handleMouseLeave}
 				>
@@ -173,6 +174,7 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
 
 				{/* Sign Out Button - Moved to end */}
 				<button
+					type="button"
 					className="text-red-500/70 hover:text-red-500/90 transition-colors hover:cursor-pointer"
 					title="Sign Out"
 					onClick={() => window.electronAPI.quitApp()}

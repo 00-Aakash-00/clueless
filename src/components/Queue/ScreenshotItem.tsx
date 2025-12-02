@@ -47,6 +47,7 @@ const ScreenshotItem: React.FC<ScreenshotItemProps> = ({
 			</div>
 			{!isLoading && (
 				<button
+					type="button"
 					onClick={(e) => {
 						e.stopPropagation();
 						handleDelete();

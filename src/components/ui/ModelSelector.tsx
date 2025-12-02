@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 interface ModelConfig {
 	model: string;
@@ -25,7 +25,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 	const [selectedModel, setSelectedModel] =
 		useState<string>("openai/gpt-oss-20b");
 
-	const loadCurrentConfig = async () => {
+	const loadCurrentConfig = useCallback(async () => {
 		try {
 			setIsLoading(true);
 			const config = await window.electronAPI.getCurrentLlmConfig();
@@ -36,11 +36,11 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 		} finally {
 			setIsLoading(false);
 		}
-	};
+	}, []);
 
 	useEffect(() => {
 		loadCurrentConfig();
-	}, []);
+	}, [loadCurrentConfig]);
 
 	const testConnection = async () => {
 		try {
@@ -145,9 +145,12 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 
 			{/* Model Selection */}
 			<div className="space-y-2">
-				<label className="text-xs font-medium text-gray-700">Text Model</label>
+				<span className="text-xs font-medium text-gray-700 block">
+					Text Model
+				</span>
 				<div className="flex gap-2">
 					<button
+						type="button"
 						onClick={() => setSelectedModel("openai/gpt-oss-20b")}
 						className={`flex-1 px-3 py-2 rounded-xl text-xs transition-all ${
 							selectedModel === "openai/gpt-oss-20b"
@@ -158,6 +161,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 						GPT-OSS 20B (Fast)
 					</button>
 					<button
+						type="button"
 						onClick={() => setSelectedModel("openai/gpt-oss-120b")}
 						className={`flex-1 px-3 py-2 rounded-xl text-xs transition-all ${
 							selectedModel === "openai/gpt-oss-120b"
@@ -178,6 +182,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 			{/* Action buttons */}
 			<div className="flex gap-2 pt-2">
 				<button
+					type="button"
 					onClick={handleModelSwitch}
 					disabled={
 						connectionStatus === "testing" ||
@@ -189,6 +194,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 				</button>
 
 				<button
+					type="button"
 					onClick={testConnection}
 					disabled={connectionStatus === "testing"}
 					className="px-3 py-2 bg-gray-600/80 hover:bg-gray-700/80 disabled:bg-gray-400/80 text-white text-xs rounded-xl transition-all shadow-md backdrop-blur-sm"

@@ -203,7 +203,11 @@ const App: React.FC = () => {
 				}
 			}),
 		];
-		return () => cleanupFunctions.forEach((cleanup) => cleanup());
+		return () => {
+			for (const cleanup of cleanupFunctions) {
+				cleanup();
+			}
+		};
 	}, [view]);
 
 	return (

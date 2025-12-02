@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "react-query";
 import QueueCommands from "../components/Queue/QueueCommands";
 import ScreenshotQueue from "../components/Queue/ScreenshotQueue";
@@ -70,14 +70,13 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 		},
 	);
 
-	const showToast = (
-		title: string,
-		description: string,
-		variant: ToastVariant,
-	) => {
-		setToastMessage({ title, description, variant });
-		setToastOpen(true);
-	};
+	const showToast = useCallback(
+		(title: string, description: string, variant: ToastVariant) => {
+			setToastMessage({ title, description, variant });
+			setToastOpen(true);
+		},
+		[],
+	);
 
 	const handleDeleteScreenshot = async (index: number) => {
 		const screenshotToDelete = screenshots[index];
@@ -177,7 +176,9 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 
 		return () => {
 			resizeObserver.disconnect();
-			cleanupFunctions.forEach((cleanup) => cleanup());
+			for (const cleanup of cleanupFunctions) {
+				cleanup();
+			}
 		};
 	}, [isTooltipVisible, tooltipHeight, refetch, setView, showToast]);
 
@@ -313,7 +314,7 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 								) : (
 									chatMessages.map((msg, idx) => (
 										<div
-											key={idx}
+											key={`${msg.role}-${idx}-${msg.text.substring(0, 20)}`}
 											className={`w-full flex ${msg.role === "user" ? "justify-end" : "justify-start"} mb-3`}
 										>
 											<div
@@ -383,6 +384,7 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 										strokeWidth={2}
 										stroke="white"
 										className="w-4 h-4"
+										aria-hidden="true"
 									>
 										<path
 											strokeLinecap="round"
