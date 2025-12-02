@@ -107,7 +107,7 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
     const loadCurrentModel = async () => {
       try {
         const config = await window.electronAPI.getCurrentLlmConfig();
-        setCurrentModel({ provider: "groq", model: config.model });
+        setCurrentModel({ provider: config.provider, model: config.model });
       } catch (error) {
         console.error('Error loading current model config:', error);
       }

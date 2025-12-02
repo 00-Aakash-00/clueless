@@ -25,7 +25,7 @@ export interface ElectronAPI {
   quitApp: () => Promise<void>
 
   // LLM Model Management
-  getCurrentLlmConfig: () => Promise<{ model: string; visionModel: string; availableModels: string[] }>
+  getCurrentLlmConfig: () => Promise<{ provider: string; model: string; visionModel: string; availableModels: string[] }>
   getAvailableModels: () => Promise<string[]>
   switchModel: (model: string) => Promise<{ success: boolean; error?: string }>
   testLlmConnection: () => Promise<{ success: boolean; error?: string }>
