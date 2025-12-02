@@ -19,10 +19,22 @@ export class AppState {
 
 	private problemInfo: {
 		problem_statement: string;
-		input_format: Record<string, unknown>;
-		output_format: Record<string, unknown>;
-		constraints: Array<Record<string, unknown>>;
-		test_cases: Array<Record<string, unknown>>;
+		context?: string;
+		suggested_responses?: string[];
+		reasoning?: string;
+		input_format?: {
+			description: string;
+			parameters: unknown[];
+		};
+		output_format?: {
+			description: string;
+			type: string;
+			subtype: string;
+		};
+		complexity?: { time: string; space: string };
+		test_cases?: unknown[];
+		validation_type?: string;
+		difficulty?: string;
 	} | null = null; // Allow null
 
 	private hasDebugged: boolean = false;
@@ -93,10 +105,22 @@ export class AppState {
 
 	public getProblemInfo(): {
 		problem_statement: string;
-		input_format: Record<string, unknown>;
-		output_format: Record<string, unknown>;
-		constraints: Array<Record<string, unknown>>;
-		test_cases: Array<Record<string, unknown>>;
+		context?: string;
+		suggested_responses?: string[];
+		reasoning?: string;
+		input_format?: {
+			description: string;
+			parameters: unknown[];
+		};
+		output_format?: {
+			description: string;
+			type: string;
+			subtype: string;
+		};
+		complexity?: { time: string; space: string };
+		test_cases?: unknown[];
+		validation_type?: string;
+		difficulty?: string;
 	} | null {
 		return this.problemInfo;
 	}
@@ -104,10 +128,22 @@ export class AppState {
 	public setProblemInfo(
 		problemInfo: {
 			problem_statement: string;
-			input_format: Record<string, unknown>;
-			output_format: Record<string, unknown>;
-			constraints: Array<Record<string, unknown>>;
-			test_cases: Array<Record<string, unknown>>;
+			context?: string;
+			suggested_responses?: string[];
+			reasoning?: string;
+			input_format?: {
+				description: string;
+				parameters: unknown[];
+			};
+			output_format?: {
+				description: string;
+				type: string;
+				subtype: string;
+			};
+			complexity?: { time: string; space: string };
+			test_cases?: unknown[];
+			validation_type?: string;
+			difficulty?: string;
 		} | null,
 	): void {
 		this.problemInfo = problemInfo;
