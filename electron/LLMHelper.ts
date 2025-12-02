@@ -212,8 +212,7 @@ export class LLMHelper {
 					"Raw response:",
 					text,
 				);
-				const message =
-					e instanceof Error ? e.message : "Unknown parse error";
+				const message = e instanceof Error ? e.message : "Unknown parse error";
 				throw new Error(`Failed to parse Groq response as JSON: ${message}`);
 			}
 		} catch (error) {
@@ -222,7 +221,10 @@ export class LLMHelper {
 		}
 	}
 
-	public async generateSolution(problemInfo: ProblemInfo, signal?: AbortSignal) {
+	public async generateSolution(
+		problemInfo: ProblemInfo,
+		signal?: AbortSignal,
+	) {
 		const prompt = `${this.systemPrompt}\n\nGiven this problem or situation:\n${JSON.stringify(problemInfo, null, 2)}\n\nPlease provide your response in the following JSON format:\n{
   "solution": {
     "code": "The code or main answer here.",
@@ -253,8 +255,7 @@ export class LLMHelper {
 					"Raw response:",
 					text,
 				);
-				const message =
-					e instanceof Error ? e.message : "Unknown parse error";
+				const message = e instanceof Error ? e.message : "Unknown parse error";
 				throw new Error(`Failed to parse Groq response as JSON: ${message}`);
 			}
 		} catch (error) {
@@ -316,8 +317,7 @@ export class LLMHelper {
 					"Raw response:",
 					text,
 				);
-				const message =
-					e instanceof Error ? e.message : "Unknown parse error";
+				const message = e instanceof Error ? e.message : "Unknown parse error";
 				throw new Error(`Failed to parse Groq response as JSON: ${message}`);
 			}
 		} catch (error) {

@@ -79,7 +79,9 @@ declare global {
 				callback: (data: ProblemExtractedData) => void,
 			) => () => void;
 
-			onDebugSuccess: (callback: (data: DebugSuccessData) => void) => () => void;
+			onDebugSuccess: (
+				callback: (data: DebugSuccessData) => void,
+			) => () => void;
 
 			onDebugStart: (callback: () => void) => () => void;
 			onDebugError: (callback: (error: string) => void) => () => void;

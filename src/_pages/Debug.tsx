@@ -106,19 +106,19 @@ const CodeComparisonSection = ({
 
 	return (
 		<div className="space-y-1.5">
-			<h2 className="text-[13px] font-medium text-white tracking-wide">
+			<h2 className="text-[13px] font-medium text-white/95 tracking-wide">
 				Code Comparison
 			</h2>
 			{isLoading ? (
 				<div className="space-y-1">
 					<div className="mt-3 flex">
-						<p className="text-xs bg-gradient-to-r from-gray-300 via-gray-100 to-gray-300 bg-clip-text text-transparent animate-pulse">
+						<p className="text-xs text-gray-300/80">
 							Loading code comparison...
 						</p>
 					</div>
 				</div>
 			) : (
-				<div className="flex flex-row gap-0.5 bg-[#161b22] rounded-lg overflow-hidden">
+				<div className="flex flex-row gap-0.5 bg-[#161b22] rounded-xl overflow-hidden">
 					{/* Previous Code */}
 					<div className="w-1/2 border-r border-gray-700">
 						<div className="bg-[#2d333b] px-3 py-1.5">
@@ -381,9 +381,9 @@ const Debug: React.FC<DebugProps> = ({ isProcessing, setIsProcessing }) => {
 			/>
 
 			{/* Main Content */}
-			<div className="w-full text-sm text-black bg-black/60 rounded-md">
-				<div className="rounded-lg overflow-hidden">
-					<div className="px-4 py-3 space-y-4">
+			<div className="w-full text-sm glass-card-dark">
+				<div className="rounded-xl overflow-hidden">
+					<div className="px-4 py-4 space-y-4">
 						{/* Thoughts Section */}
 						<ContentSection
 							title="What I Changed"

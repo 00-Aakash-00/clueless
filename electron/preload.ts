@@ -65,7 +65,9 @@ interface ElectronAPI {
 	onProblemExtracted: (
 		callback: (data: ProblemExtractedData) => void,
 	) => () => void;
-	onSolutionSuccess: (callback: (data: SolutionSuccessData) => void) => () => void;
+	onSolutionSuccess: (
+		callback: (data: SolutionSuccessData) => void,
+	) => () => void;
 
 	onUnauthorized: (callback: () => void) => () => void;
 	onDebugError: (callback: (error: string) => void) => () => void;
@@ -163,14 +165,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		};
 	},
 	onDebugError: (callback: (error: string) => void) => {
-		const subscription = (_: IpcRendererEvent, error: string) => callback(error);
+		const subscription = (_: IpcRendererEvent, error: string) =>
+			callback(error);
 		ipcRenderer.on(PROCESSING_EVENTS.DEBUG_ERROR, subscription);
 		return () => {
 			ipcRenderer.removeListener(PROCESSING_EVENTS.DEBUG_ERROR, subscription);
 		};
 	},
 	onSolutionError: (callback: (error: string) => void) => {
-		const subscription = (_: IpcRendererEvent, error: string) => callback(error);
+		const subscription = (_: IpcRendererEvent, error: string) =>
+			callback(error);
 		ipcRenderer.on(PROCESSING_EVENTS.INITIAL_SOLUTION_ERROR, subscription);
 		return () => {
 			ipcRenderer.removeListener(

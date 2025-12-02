@@ -17,34 +17,21 @@
 	overflow: hidden;
 }
 
-/* Enhanced liquid glass with shimmer effect */
+/* Static top highlight instead of shimmer animation */
 .liquid-glass::before {
 	content: "";
 	position: absolute;
 	top: 0;
-	left: -100%;
-	width: 100%;
-	height: 100%;
+	left: 0;
+	right: 0;
+	height: 1px;
 	background: linear-gradient(
 		90deg,
 		transparent,
-		rgba(255, 255, 255, 0.1),
+		rgba(255, 255, 255, 0.6),
 		transparent
 	);
-	animation: shimmer 3s ease-in-out infinite;
 	pointer-events: none;
-}
-
-@keyframes shimmer {
-	0% {
-		left: -100%;
-	}
-	50% {
-		left: 100%;
-	}
-	100% {
-		left: 100%;
-	}
 }
 
 /* Fallback for browsers without backdrop-filter support */
@@ -152,20 +139,241 @@ textarea,
 	max-height: 32px;
 }
 
-/* Shimmer effect for bar variant */
+/* Static top highlight for bar variant */
 .liquid-glass-bar::before {
 	content: "";
 	position: absolute;
 	top: 0;
-	left: -100%;
-	width: 100%;
-	height: 100%;
+	left: 0;
+	right: 0;
+	height: 1px;
 	background: linear-gradient(
 		90deg,
 		transparent,
-		rgba(255, 255, 255, 0.1),
+		rgba(255, 255, 255, 0.6),
 		transparent
 	);
-	animation: shimmer 3s ease-in-out infinite;
 	pointer-events: none;
+}
+
+/* ===== NEW GLASS CARD STYLES ===== */
+
+/* Glass card with tint for visibility */
+.glass-card {
+	background: rgba(255, 255, 255, 0.12);
+	border-radius: 20px;
+	border: 1px solid rgba(255, 255, 255, 0.35);
+	box-shadow:
+		0 8px 32px rgba(0, 0, 0, 0.15),
+		inset 0 1px 0 rgba(255, 255, 255, 0.5),
+		inset 0 -1px 0 rgba(255, 255, 255, 0.1),
+		inset 0 0 60px 30px rgba(255, 255, 255, 0.08);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+	position: relative;
+	overflow: hidden;
+}
+
+.glass-card::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 1px;
+	background: linear-gradient(
+		90deg,
+		transparent,
+		rgba(255, 255, 255, 0.8),
+		transparent
+	);
+	pointer-events: none;
+}
+
+.glass-card::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 1px;
+	height: 100%;
+	background: linear-gradient(
+		180deg,
+		rgba(255, 255, 255, 0.8),
+		transparent,
+		rgba(255, 255, 255, 0.3)
+	);
+	pointer-events: none;
+}
+
+/* Dark tinted variant for better text contrast */
+.glass-card-dark {
+	background: rgba(30, 30, 40, 0.75);
+	border-radius: 20px;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	box-shadow:
+		0 8px 32px rgba(0, 0, 0, 0.3),
+		inset 0 1px 0 rgba(255, 255, 255, 0.1);
+	backdrop-filter: blur(16px);
+	-webkit-backdrop-filter: blur(16px);
+	position: relative;
+	overflow: hidden;
+	color: rgba(255, 255, 255, 0.92);
+}
+
+/* Light tinted variant */
+.glass-card-light {
+	background: rgba(255, 255, 255, 0.25);
+	border-radius: 16px;
+	border: 1px solid rgba(255, 255, 255, 0.4);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+}
+
+/* ===== CHAT MESSAGE STYLES ===== */
+
+.chat-message-user {
+	background: rgba(59, 130, 246, 0.8);
+	color: white;
+	border-radius: 12px;
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
+}
+
+.chat-message-assistant {
+	background: rgba(255, 255, 255, 0.9);
+	color: rgba(30, 30, 40, 0.95);
+	border-radius: 12px;
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
+}
+
+/* ===== MARKDOWN/PROSE STYLES FOR GLASS ===== */
+
+.prose-glass {
+	color: inherit;
+}
+
+.prose-glass h1,
+.prose-glass h2,
+.prose-glass h3 {
+	color: rgba(255, 255, 255, 0.98);
+	font-weight: 600;
+	margin-top: 1em;
+	margin-bottom: 0.5em;
+}
+
+.prose-glass h1 {
+	font-size: 1.5em;
+}
+.prose-glass h2 {
+	font-size: 1.25em;
+}
+.prose-glass h3 {
+	font-size: 1.1em;
+}
+
+.prose-glass p {
+	color: rgba(255, 255, 255, 0.9);
+	line-height: 1.6;
+	margin-bottom: 0.75em;
+}
+
+.prose-glass ul,
+.prose-glass ol {
+	padding-left: 1.5em;
+	margin-bottom: 0.75em;
+}
+
+.prose-glass li {
+	color: rgba(255, 255, 255, 0.9);
+	margin-bottom: 0.25em;
+}
+
+.prose-glass code {
+	background: rgba(0, 0, 0, 0.3);
+	padding: 0.2em 0.4em;
+	border-radius: 4px;
+	font-size: 0.9em;
+	font-family: "SF Mono", "Monaco", "Menlo", monospace;
+}
+
+.prose-glass pre {
+	background: rgba(0, 0, 0, 0.4);
+	border-radius: 8px;
+	padding: 1em;
+	overflow-x: auto;
+	margin-bottom: 1em;
+}
+
+.prose-glass pre code {
+	background: transparent;
+	padding: 0;
+}
+
+.prose-glass a {
+	color: rgba(147, 197, 253, 1);
+	text-decoration: underline;
+}
+
+.prose-glass a:hover {
+	color: rgba(191, 219, 254, 1);
+}
+
+.prose-glass blockquote {
+	border-left: 3px solid rgba(255, 255, 255, 0.3);
+	padding-left: 1em;
+	margin-left: 0;
+	color: rgba(255, 255, 255, 0.8);
+	font-style: italic;
+}
+
+.prose-glass strong {
+	font-weight: 600;
+	color: rgba(255, 255, 255, 0.98);
+}
+
+/* Dark prose variant for light backgrounds */
+.prose-dark {
+	color: rgba(30, 30, 40, 0.95);
+}
+
+.prose-dark h1,
+.prose-dark h2,
+.prose-dark h3 {
+	color: rgba(30, 30, 40, 0.98);
+}
+
+.prose-dark p,
+.prose-dark li {
+	color: rgba(30, 30, 40, 0.9);
+}
+
+.prose-dark code {
+	background: rgba(0, 0, 0, 0.1);
+}
+
+.prose-dark a {
+	color: rgba(59, 130, 246, 1);
+}
+
+/* ===== LOADING INDICATOR (NON-PULSING) ===== */
+
+.loading-dots {
+	display: inline-flex;
+	gap: 4px;
+}
+
+.loading-dots span {
+	opacity: 0.6;
+}
+
+.loading-dots span:nth-child(1) {
+	opacity: 0.4;
+}
+.loading-dots span:nth-child(2) {
+	opacity: 0.6;
+}
+.loading-dots span:nth-child(3) {
+	opacity: 0.8;
 }

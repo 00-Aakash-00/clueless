@@ -29,17 +29,17 @@ export const ContentSection = ({
 	isLoading: boolean;
 }) => (
 	<div className="space-y-2">
-		<h2 className="text-[13px] font-medium text-white tracking-wide">
+		<h2 className="text-[13px] font-medium text-white/95 tracking-wide">
 			{title}
 		</h2>
 		{isLoading ? (
 			<div className="mt-4 flex">
-				<p className="text-xs bg-gradient-to-r from-gray-300 via-gray-100 to-gray-300 bg-clip-text text-transparent animate-pulse">
+				<p className="text-xs text-gray-300/80">
 					Extracting problem statement...
 				</p>
 			</div>
 		) : (
-			<div className="text-[13px] leading-[1.4] text-gray-100 max-w-[600px]">
+			<div className="text-[13px] leading-[1.5] text-gray-100/90 max-w-[600px]">
 				{content}
 			</div>
 		)}
@@ -55,19 +55,17 @@ const SolutionSection = ({
 	isLoading: boolean;
 }) => (
 	<div className="space-y-2">
-		<h2 className="text-[13px] font-medium text-white tracking-wide">
+		<h2 className="text-[13px] font-medium text-white/95 tracking-wide">
 			{title}
 		</h2>
 		{isLoading ? (
 			<div className="space-y-1.5">
 				<div className="mt-4 flex">
-					<p className="text-xs bg-gradient-to-r from-gray-300 via-gray-100 to-gray-300 bg-clip-text text-transparent animate-pulse">
-						Loading solutions...
-					</p>
+					<p className="text-xs text-gray-300/80">Loading solutions...</p>
 				</div>
 			</div>
 		) : (
-			<div className="w-full">
+			<div className="w-full rounded-lg overflow-hidden">
 				<SyntaxHighlighter
 					showLineNumbers
 					language="python"
@@ -78,6 +76,7 @@ const SolutionSection = ({
 						padding: "1rem",
 						whiteSpace: "pre-wrap",
 						wordBreak: "break-all",
+						borderRadius: "12px",
 					}}
 					wrapLongLines={true}
 				>
@@ -98,25 +97,23 @@ export const ComplexitySection = ({
 	isLoading: boolean;
 }) => (
 	<div className="space-y-2">
-		<h2 className="text-[13px] font-medium text-white tracking-wide">
-			Complexity (Updated)
+		<h2 className="text-[13px] font-medium text-white/95 tracking-wide">
+			Complexity
 		</h2>
 		{isLoading ? (
-			<p className="text-xs bg-gradient-to-r from-gray-300 via-gray-100 to-gray-300 bg-clip-text text-transparent animate-pulse">
-				Calculating complexity...
-			</p>
+			<p className="text-xs text-gray-300/80">Calculating complexity...</p>
 		) : (
 			<div className="space-y-1">
-				<div className="flex items-start gap-2 text-[13px] leading-[1.4] text-gray-100">
-					<div className="w-1 h-1 rounded-full bg-blue-400/80 mt-2 shrink-0" />
+				<div className="flex items-start gap-2 text-[13px] leading-[1.5] text-gray-100/90">
+					<div className="w-1.5 h-1.5 rounded-full bg-blue-400/80 mt-1.5 shrink-0" />
 					<div>
-						<strong>Time:</strong> {timeComplexity}
+						<strong className="text-white/95">Time:</strong> {timeComplexity}
 					</div>
 				</div>
-				<div className="flex items-start gap-2 text-[13px] leading-[1.4] text-gray-100">
-					<div className="w-1 h-1 rounded-full bg-blue-400/80 mt-2 shrink-0" />
+				<div className="flex items-start gap-2 text-[13px] leading-[1.5] text-gray-100/90">
+					<div className="w-1.5 h-1.5 rounded-full bg-blue-400/80 mt-1.5 shrink-0" />
 					<div>
-						<strong>Space:</strong> {spaceComplexity}
+						<strong className="text-white/95">Space:</strong> {spaceComplexity}
 					</div>
 				</div>
 			</div>
@@ -422,9 +419,9 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 					/>
 
 					{/* Main Content - Modified width constraints */}
-					<div className="w-full text-sm text-black bg-black/60 rounded-md">
-						<div className="rounded-lg overflow-hidden">
-							<div className="px-4 py-3 space-y-4 max-w-full">
+					<div className="w-full text-sm glass-card-dark">
+						<div className="rounded-xl overflow-hidden">
+							<div className="px-4 py-4 space-y-4 max-w-full">
 								{/* Show Screenshot Result as main output if validation_type is manual */}
 								{problemStatementData?.validation_type === "manual" ? (
 									<ContentSection
@@ -443,7 +440,7 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 										{/* Show loading state when waiting for solution */}
 										{problemStatementData && !solutionData && (
 											<div className="mt-4 flex">
-												<p className="text-xs bg-gradient-to-r from-gray-300 via-gray-100 to-gray-300 bg-clip-text text-transparent animate-pulse">
+												<p className="text-xs text-gray-300/80">
 													Generating solutions...
 												</p>
 											</div>

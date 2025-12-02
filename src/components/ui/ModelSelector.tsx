@@ -118,8 +118,8 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 
 	if (isLoading) {
 		return (
-			<div className="p-4 bg-white/20 backdrop-blur-md rounded-lg border border-white/30">
-				<div className="animate-pulse text-sm text-gray-600">
+			<div className="p-4 glass-card">
+				<div className="text-sm text-gray-600">
 					Loading model configuration...
 				</div>
 			</div>
@@ -127,7 +127,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 	}
 
 	return (
-		<div className="p-4 bg-white/20 backdrop-blur-md rounded-lg border border-white/30 space-y-4">
+		<div className="p-4 glass-card space-y-4">
 			<div className="flex items-center justify-between">
 				<h3 className="text-sm font-semibold text-gray-800">
 					AI Model Selection
@@ -137,7 +137,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 
 			{/* Current Status */}
 			{currentConfig && (
-				<div className="text-xs text-gray-600 bg-white/40 p-2 rounded space-y-1">
+				<div className="text-xs text-gray-600 bg-white/30 p-2 rounded-lg space-y-1">
 					<div>Text Model: {getModelDisplayName(currentConfig.model)}</div>
 					<div>Vision Model: {currentConfig.visionModel}</div>
 				</div>
@@ -149,20 +149,20 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 				<div className="flex gap-2">
 					<button
 						onClick={() => setSelectedModel("openai/gpt-oss-20b")}
-						className={`flex-1 px-3 py-2 rounded text-xs transition-all ${
+						className={`flex-1 px-3 py-2 rounded-xl text-xs transition-all ${
 							selectedModel === "openai/gpt-oss-20b"
-								? "bg-blue-500 text-white shadow-md"
-								: "bg-white/40 text-gray-700 hover:bg-white/60"
+								? "bg-blue-500/90 text-white shadow-md"
+								: "bg-white/30 text-gray-700 hover:bg-white/50"
 						}`}
 					>
 						GPT-OSS 20B (Fast)
 					</button>
 					<button
 						onClick={() => setSelectedModel("openai/gpt-oss-120b")}
-						className={`flex-1 px-3 py-2 rounded text-xs transition-all ${
+						className={`flex-1 px-3 py-2 rounded-xl text-xs transition-all ${
 							selectedModel === "openai/gpt-oss-120b"
-								? "bg-purple-500 text-white shadow-md"
-								: "bg-white/40 text-gray-700 hover:bg-white/60"
+								? "bg-purple-500/90 text-white shadow-md"
+								: "bg-white/30 text-gray-700 hover:bg-white/50"
 						}`}
 					>
 						GPT-OSS 120B (Powerful)
@@ -171,7 +171,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 			</div>
 
 			{/* Vision Model Info */}
-			<div className="text-xs text-gray-600 bg-white/40 p-2 rounded">
+			<div className="text-xs text-gray-600 bg-white/30 p-2 rounded-lg">
 				Vision: Llama 4 Scout 17B (used for image analysis)
 			</div>
 
@@ -183,7 +183,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 						connectionStatus === "testing" ||
 						selectedModel === currentConfig?.model
 					}
-					className="flex-1 px-3 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white text-xs rounded transition-all shadow-md"
+					className="flex-1 px-3 py-2 bg-blue-500/90 hover:bg-blue-600/90 disabled:bg-gray-400/80 text-white text-xs rounded-xl transition-all shadow-md backdrop-blur-sm"
 				>
 					{connectionStatus === "testing" ? "Switching..." : "Apply Changes"}
 				</button>
@@ -191,7 +191,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 				<button
 					onClick={testConnection}
 					disabled={connectionStatus === "testing"}
-					className="px-3 py-2 bg-gray-500 hover:bg-gray-600 disabled:bg-gray-400 text-white text-xs rounded transition-all shadow-md"
+					className="px-3 py-2 bg-gray-600/80 hover:bg-gray-700/80 disabled:bg-gray-400/80 text-white text-xs rounded-xl transition-all shadow-md backdrop-blur-sm"
 				>
 					Test
 				</button>
