@@ -4,85 +4,249 @@
 
 ## 🚀 Quick Start Guide
 
-### Prerequisites
+### Prerequisites (All Platforms)
 
-- Make sure you have Node.js installed on your computer
-- Git installed on your computer
-- A Groq API key (get it from [Groq Console](https://console.groq.com/keys))
+- **Node.js** v18 or higher ([Download](https://nodejs.org/))
+- **Git** ([Download](https://git-scm.com/downloads))
+- **Groq API Key** (free at [Groq Console](https://console.groq.com/keys))
 
-### Installation Steps
+---
 
-1. Clone the repository:
+## 🍎 macOS Installation & Setup
+
+### Step 1: Install Prerequisites
 
 ```bash
-git clone [repository-url]
-cd free-cluely
+# Install Homebrew (if not installed)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install Node.js
+brew install node
+
+# Verify installation
+node --version  # Should show v18.x.x or higher
+npm --version
 ```
 
-2. Install dependencies:
+### Step 2: Clone and Install
 
 ```bash
-# If you encounter Sharp/Python build errors, use this:
+# Clone the repository
+git clone https://github.com/00-Aakash-00/clueless.git
+cd clueless
+
+# Install dependencies
+npm install
+
+# If you encounter Sharp/Python build errors:
 SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install --ignore-scripts
 npm rebuild sharp
-
-# Or for normal installation:
-npm install
 ```
 
-3. Set up environment variables:
+### Step 3: Configure Environment
 
-   - Create a file named `.env` in the root folder
+```bash
+# Create .env file
+touch .env
 
-   ```env
-   GROQ_API_KEY=your_groq_api_key_here
-   GROQ_TEXT_MODEL=openai/gpt-oss-20b
-   ```
+# Open in your preferred editor and add:
+echo "GROQ_API_KEY=your_groq_api_key_here" >> .env
+echo "GROQ_TEXT_MODEL=openai/gpt-oss-20b" >> .env
+```
 
-   - Available text models:
-     - `openai/gpt-oss-20b` (default, faster)
-     - `openai/gpt-oss-120b` (larger, more capable)
+Or manually create a `.env` file in the root folder with:
+```env
+GROQ_API_KEY=your_groq_api_key_here
+GROQ_TEXT_MODEL=openai/gpt-oss-20b
+```
 
-   - Save the file
+### Step 4: Run the App
 
-### Running the App
+```bash
+# Development mode (recommended for first run)
+npm start
 
-#### Method 1: Development Mode (Recommended for first run)
+# Or build for production
+npm run dist
+# The built .dmg will be in the 'release' folder
+```
 
-1. Start the development server:
+### macOS Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Cmd + B` | Toggle window visibility (show/hide) |
+| `Cmd + H` | Take screenshot for AI analysis |
+| `Cmd + Enter` | Process screenshots and get solution |
+| `Cmd + R` | Reset/Cancel current operation |
+| `Cmd + Arrow Keys` | Move window around screen |
+| `Cmd + Q` | Quit the application |
+
+### macOS Permissions
+
+On first run, you may need to grant permissions:
+1. **Screen Recording**: System Preferences → Privacy & Security → Screen Recording → Enable for Cluely
+2. **Accessibility** (optional): System Preferences → Privacy & Security → Accessibility → Enable for Cluely
+
+---
+
+## 🪟 Windows Installation & Setup
+
+### Step 1: Install Prerequisites
+
+**Option A: Using winget (Windows 11 / Windows 10 with winget)**
+```powershell
+# Open PowerShell as Administrator
+winget install OpenJS.NodeJS.LTS
+winget install Git.Git
+
+# Restart PowerShell, then verify
+node --version  # Should show v18.x.x or higher
+npm --version
+git --version
+```
+
+**Option B: Manual Installation**
+1. Download and install Node.js LTS from [nodejs.org](https://nodejs.org/)
+2. Download and install Git from [git-scm.com](https://git-scm.com/download/win)
+3. Restart your terminal/PowerShell
+
+### Step 2: Clone and Install
+
+```powershell
+# Open PowerShell or Command Prompt
+git clone https://github.com/00-Aakash-00/clueless.git
+cd clueless
+
+# Install dependencies
+npm install
+
+# If you encounter build errors, try:
+npm install --ignore-scripts
+npm rebuild sharp
+```
+
+### Step 3: Configure Environment
+
+```powershell
+# Create .env file using PowerShell
+New-Item -Path ".env" -ItemType File
+
+# Add your API key (replace with your actual key)
+Add-Content -Path ".env" -Value "GROQ_API_KEY=your_groq_api_key_here"
+Add-Content -Path ".env" -Value "GROQ_TEXT_MODEL=openai/gpt-oss-20b"
+```
+
+Or manually create a `.env` file in the root folder with Notepad:
+```env
+GROQ_API_KEY=your_groq_api_key_here
+GROQ_TEXT_MODEL=openai/gpt-oss-20b
+```
+
+### Step 4: Run the App
+
+```powershell
+# Development mode (recommended for first run)
+npm start
+
+# Or build for production
+npm run dist
+# The built .exe installer will be in the 'release' folder
+```
+
+### Windows Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl + B` | Toggle window visibility (show/hide) |
+| `Ctrl + H` | Take screenshot for AI analysis |
+| `Ctrl + Enter` | Process screenshots and get solution |
+| `Ctrl + R` | Reset/Cancel current operation |
+| `Ctrl + Arrow Keys` | Move window around screen |
+| `Ctrl + Q` | Quit the application |
+
+### Windows Firewall
+
+On first run, Windows Firewall may prompt you:
+- Click "Allow access" to let the app communicate with Groq's API
+
+---
+
+## 🐧 Linux Installation & Setup
+
+### Step 1: Install Prerequisites
+
+**Ubuntu/Debian:**
+```bash
+# Update package list
+sudo apt update
+
+# Install Node.js (using NodeSource)
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+sudo apt install -y nodejs git
+
+# Verify installation
+node --version
+npm --version
+```
+
+**Fedora:**
+```bash
+sudo dnf install nodejs npm git
+```
+
+**Arch Linux:**
+```bash
+sudo pacman -S nodejs npm git
+```
+
+### Step 2: Clone and Install
+
+```bash
+git clone https://github.com/00-Aakash-00/clueless.git
+cd clueless
+
+# Install dependencies
+npm install
+
+# If you encounter Sharp errors:
+SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install --ignore-scripts
+npm rebuild sharp
+```
+
+### Step 3: Configure Environment
+
+```bash
+# Create and edit .env file
+echo "GROQ_API_KEY=your_groq_api_key_here" > .env
+echo "GROQ_TEXT_MODEL=openai/gpt-oss-20b" >> .env
+```
+
+### Step 4: Run the App
 
 ```bash
 npm start
 ```
 
-This command automatically:
+### Linux Keyboard Shortcuts
 
-- Starts the Vite dev server on port 5180
-- Waits for the server to be ready
-- Launches the Electron app
+Same as Windows - use `Ctrl` instead of `Cmd`.
 
-#### Method 2: Production Build
-
-```bash
-npm run dist
-```
-
-The built app will be in the `release` folder.
+---
 
 ## 🤖 AI Provider: Groq Cloud
 
 **Features:**
-
 - Ultra-fast inference (fastest available)
 - Free tier available with generous limits
 - Vision model support (Llama 4 Scout)
 - Two text models: GPT-OSS 20B and 120B
 
-**Setup:**
-
-1. Get API key from [Groq Console](https://console.groq.com/keys)
-2. Add to `.env` file as `GROQ_API_KEY=your_key_here`
-3. Optionally set `GROQ_TEXT_MODEL` to choose between models
+**Getting Your API Key:**
+1. Go to [Groq Console](https://console.groq.com/keys)
+2. Sign up or log in
+3. Click "Create API Key"
+4. Copy the key and add it to your `.env` file
 
 **Supported Models:**
 
@@ -92,175 +256,129 @@ The built app will be in the `release` folder.
 | `openai/gpt-oss-120b` | Larger, more capable text model |
 | `meta-llama/llama-4-scout-17b-16e-instruct` | Vision model (auto-used for images) |
 
-### ⚠️ Important Notes
-
-1. **Closing the App**:
-
-   - Press `Cmd + Q` (Mac) or `Ctrl + Q` (Windows/Linux) to quit
-   - Or use Activity Monitor/Task Manager to close `Interview Coder`
-   - The X button currently doesn't work (known issue)
-
-2. **If the app doesn't start**:
-
-   - Make sure no other app is using port 5180
-   - Try killing existing processes:
-     ```bash
-     # Find processes using port 5180
-     lsof -i :5180
-     # Kill them (replace [PID] with the process ID)
-     kill [PID]
-     ```
-   - Verify your Groq API key is correct
-
-3. **Keyboard Shortcuts**:
-   - `Cmd/Ctrl + B`: Toggle window visibility
-   - `Cmd/Ctrl + H`: Take screenshot
-   - `Cmd/Enter`: Get solution
-   - `Cmd/Ctrl + Arrow Keys`: Move window
+---
 
 ## 🔧 Troubleshooting
 
-### Windows Issues Fixed
+### App Won't Start
 
-- **UI not loading**: Port mismatch resolved
-- **Electron crashes**: Improved error handling
-- **Build failures**: Production config updated
-- **Window focus problems**: Platform-specific fixes applied
+**Check if port 5180 is in use:**
 
-### Ubuntu/Linux Issues Fixed
-
-- **Window interaction**: Fixed focusable settings
-- **Installation confusion**: Clear setup instructions
-- **Missing dependencies**: All requirements documented
-
-### Common Solutions
-
-#### Sharp/Python Build Errors
-
-If you see `gyp ERR! find Python` or Sharp build errors:
-
+*macOS/Linux:*
 ```bash
-# Solution 1: Use prebuilt binaries
-rm -rf node_modules package-lock.json
-SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install --ignore-scripts
-npm rebuild sharp
-
-# Solution 2: Or install Python (if you prefer building from source)
-brew install python3  # macOS
-# Then run: npm install
+lsof -i :5180
+kill -9 <PID>  # Replace <PID> with the process ID
 ```
 
-#### General Installation Issues
+*Windows:*
+```powershell
+netstat -ano | findstr :5180
+taskkill /PID <PID> /F  # Replace <PID> with the process ID
+```
 
-If you see other errors:
+### Sharp/Python Build Errors
 
-1. Delete the `node_modules` folder
-2. Delete `package-lock.json`
-3. Run `npm install` again
-4. Try running with `npm start`
+```bash
+# Clean install
+rm -rf node_modules package-lock.json  # macOS/Linux
+rmdir /s /q node_modules & del package-lock.json  # Windows
 
-### Platform-Specific Notes
+# Reinstall with prebuilt binaries
+SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install --ignore-scripts  # macOS/Linux
+set SHARP_IGNORE_GLOBAL_LIBVIPS=1 && npm install --ignore-scripts  # Windows
 
-- **Windows**: App now works on Windows 10/11
-- **Ubuntu/Linux**: Tested on Ubuntu 20.04+ and most Linux distros
-- **macOS**: Native support with proper window management
+npm rebuild sharp
+```
+
+### Window Not Visible
+
+Press `Cmd+B` (macOS) or `Ctrl+B` (Windows) to toggle visibility. The window might be hidden or off-screen.
+
+### API Errors
+
+1. Verify your `GROQ_API_KEY` in `.env` is correct
+2. Check you have API credits at [Groq Console](https://console.groq.com/)
+3. Ensure you have internet connectivity
+
+### Closing the App
+
+- Press `Cmd+Q` (macOS) or `Ctrl+Q` (Windows/Linux) to quit
+- Or use Activity Monitor (macOS) / Task Manager (Windows) to force close
+
+---
 
 ## Key Features
 
 ### **Invisible AI Assistant**
-
 - Translucent, always-on-top window that's barely noticeable
 - Hide/show instantly with global hotkeys
-- Works seamlessly across all applications
+- Content protection enabled (invisible to screen sharing on macOS)
 
 ### **Smart Screenshot Analysis**
-
 - Take screenshots of any content with `Cmd/Ctrl + H`
 - AI analyzes images, documents, presentations, or problems
 - Get instant explanations, answers, and solutions
 
 ### **Contextual Chat**
-
 - Chat with AI about anything you see on screen
 - Maintains conversation context
 - Ask follow-up questions for deeper insights
 
-### **Cross-Platform Support**
+### **Debug Mode**
+- Take additional screenshots after getting a solution
+- Press `Cmd/Ctrl + Enter` to debug
+- See side-by-side diff of old vs new code
 
-- **Windows 10/11** - Full support with native performance
-- **Ubuntu/Linux** - Optimized for all major distributions
-- **macOS** - Native window management and shortcuts
+---
 
 ## Use Cases
 
 ### **Academic & Learning**
-
-```
-✓ Live presentation support during classes
-✓ Quick research during online exams
-✓ Language translation and explanations
-✓ Math and science problem solving
-```
+- Live presentation support during classes
+- Quick research during online exams
+- Language translation and explanations
+- Math and science problem solving
 
 ### **Professional Meetings**
-
-```
-✓ Sales call preparation and objection handling
-✓ Technical interview coaching
-✓ Client presentation support
-✓ Real-time fact-checking and data lookup
-```
+- Sales call preparation and objection handling
+- Technical interview coaching
+- Client presentation support
+- Real-time fact-checking and data lookup
 
 ### **Development & Tech**
-
-```
-✓ Debug error messages instantly
-✓ Code explanation and optimization
-✓ Documentation and API references
-✓ Algorithm and architecture guidance
-```
-
-## Why Choose Free Cluely?
-
-| Feature           | Free Cluely        | Commercial Alternatives |
-| ----------------- | ------------------ | ----------------------- |
-| **Cost**          | 100% Free          | $29-99/month            |
-| **Speed**         | Ultra-fast (Groq)  | Variable                |
-| **Open Source**   | Full transparency  | Closed source           |
-| **Customization** | Fully customizable | Limited options         |
-| **Data Control**  | You own your data  | Third-party servers     |
-
-## Technical Details
-
-### **AI Models Supported (via Groq Cloud)**
-
-- **openai/gpt-oss-20b** - Fast, efficient text model
-- **openai/gpt-oss-120b** - Larger, more capable text model
-- **meta-llama/llama-4-scout-17b-16e-instruct** - Vision model for image analysis
-
-### **System Requirements**
-
-```bash
-Minimum:  4GB RAM, Dual-core CPU, 2GB storage
-Recommended: 8GB+ RAM, Quad-core CPU, 5GB+ storage
-```
-
-## 🤝 Contributing
-
-This project welcomes contributions! While I have limited time for active maintenance, I'll review and merge quality PRs.
-
-**Ways to contribute:**
-
-- 🐛 Bug fixes and stability improvements
-- ✨ New features and AI model integrations
-- 📚 Documentation and tutorial improvements
-- 🌍 Translations and internationalization
-- 🎨 UI/UX enhancements
+- Debug error messages instantly
+- Code explanation and optimization
+- Documentation and API references
+- Algorithm and architecture guidance
 
 ---
 
-**⭐ Star this repo if Free Cluely helps you succeed in meetings, interviews, or presentations!**
+## System Requirements
 
-### 🏷️ Tags
+| | Minimum | Recommended |
+|---|---------|-------------|
+| **RAM** | 4GB | 8GB+ |
+| **CPU** | Dual-core | Quad-core |
+| **Storage** | 2GB | 5GB+ |
+| **OS** | macOS 10.15+, Windows 10, Ubuntu 20.04+ | Latest versions |
+
+---
+
+## 🤝 Contributing
+
+This project welcomes contributions!
+
+**Ways to contribute:**
+- Bug fixes and stability improvements
+- New features and AI model integrations
+- Documentation and tutorial improvements
+- Translations and internationalization
+- UI/UX enhancements
+
+---
+
+**Star this repo if Free Cluely helps you succeed in meetings, interviews, or presentations!**
+
+### Tags
 
 `ai-assistant` `meeting-notes` `interview-helper` `presentation-support` `groq` `groq-cloud` `electron-app` `cross-platform` `open-source` `screenshot-analysis` `academic-helper` `sales-assistant` `coding-companion`
