@@ -27,6 +27,9 @@ export class AppState {
 
   private hasDebugged: boolean = false
 
+  // Store the current solution code for accurate debug diffs
+  private currentSolutionCode: string | null = null
+
   // Processing events
   public readonly PROCESSING_EVENTS = {
     //global states
@@ -136,6 +139,9 @@ export class AppState {
 
     // Clear problem info
     this.problemInfo = null
+
+    // Clear stored solution code
+    this.clearCurrentSolutionCode()
 
     // Reset view to initial state
     this.setView("queue")
@@ -264,6 +270,19 @@ export class AppState {
 
   public getHasDebugged(): boolean {
     return this.hasDebugged
+  }
+
+  // Current solution code management for accurate debug diffs
+  public setCurrentSolutionCode(code: string): void {
+    this.currentSolutionCode = code
+  }
+
+  public getCurrentSolutionCode(): string | null {
+    return this.currentSolutionCode
+  }
+
+  public clearCurrentSolutionCode(): void {
+    this.currentSolutionCode = null
   }
 }
 

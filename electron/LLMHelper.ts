@@ -25,16 +25,17 @@ type TextModel = "openai/gpt-oss-20b" | "openai/gpt-oss-120b"
 export class LLMHelper {
   private apiKey: string
   private textModel: TextModel
-  private readonly visionModel = "meta-llama/llama-4-scout-17b-16e-instruct"
+  private readonly visionModel: string
   private readonly apiUrl = "https://api.groq.com/openai/v1/chat/completions"
   private readonly systemPrompt = `You are Wingman AI, a helpful, proactive assistant for any kind of problem or situation (not just coding). For any user input, analyze the situation, provide a clear problem statement, relevant context, and suggest several possible responses or actions the user could take next. Always explain your reasoning. Present your suggestions as a list of options or next steps.`
 
-  constructor(apiKey: string, textModel?: TextModel) {
+  constructor(apiKey: string, textModel?: TextModel, visionModel?: string) {
     if (!apiKey) {
       throw new Error("GROQ_API_KEY is required")
     }
     this.apiKey = apiKey
     this.textModel = textModel || "openai/gpt-oss-20b"
+    this.visionModel = visionModel || "meta-llama/llama-4-scout-17b-16e-instruct"
     console.log(`[LLMHelper] Initialized with Groq API`)
     console.log(`[LLMHelper] Text model: ${this.textModel}`)
     console.log(`[LLMHelper] Vision model: ${this.visionModel}`)
@@ -74,6 +75,14 @@ export class LLMHelper {
       if (!response.ok) {
         const errorText = await response.text()
         console.error("[LLMHelper] Groq API error:", response.status, errorText)
+
+        // Throw specific error for auth failures (401/403)
+        if (response.status === 401 || response.status === 403) {
+          const authError = new Error(`Groq API authentication error: ${response.status} - ${errorText}`)
+          ;(authError as any).isAuthError = true
+          throw authError
+        }
+
         throw new Error(`Groq API error: ${response.status} - ${errorText}`)
       }
 

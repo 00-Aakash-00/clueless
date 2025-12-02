@@ -26,8 +26,11 @@ export class ProcessingHelper {
     // Get text model from environment (default to gpt-oss-20b)
     const textModel = (process.env.GROQ_TEXT_MODEL || "openai/gpt-oss-20b") as TextModel
 
+    // Get vision model from environment (optional)
+    const visionModel = process.env.GROQ_VISION_MODEL
+
     console.log("[ProcessingHelper] Initializing with Groq Cloud")
-    this.llmHelper = new LLMHelper(apiKey, textModel)
+    this.llmHelper = new LLMHelper(apiKey, textModel, visionModel)
   }
 
   public async processScreenshots(): Promise<void> {
@@ -44,19 +47,22 @@ export class ProcessingHelper {
       }
 
       const allPaths = this.appState.getScreenshotHelper().getScreenshotQueue()
-      const lastPath = allPaths[allPaths.length - 1]
 
-      // Handle screenshot as image analysis
+      // Handle screenshots as batch image analysis (processes all screenshots, up to 5)
       mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.INITIAL_START)
       this.appState.setView("solutions")
       this.currentProcessingAbortController = new AbortController()
       const signal = this.currentProcessingAbortController.signal
       try {
-        const imageResult = await this.llmHelper.analyzeImageFile(lastPath, signal)
+        // Use extractProblemFromImages for batch processing all screenshots
+        const extractedProblem = await this.llmHelper.extractProblemFromImages(allPaths, signal)
         const problemInfo = {
-          problem_statement: imageResult.text,
-          input_format: { description: "Generated from screenshot", parameters: [] as any[] },
-          output_format: { description: "Generated from screenshot", type: "string", subtype: "text" },
+          problem_statement: extractedProblem.problem_statement,
+          context: extractedProblem.context,
+          suggested_responses: extractedProblem.suggested_responses,
+          reasoning: extractedProblem.reasoning,
+          input_format: { description: "Generated from screenshots", parameters: [] as any[] },
+          output_format: { description: "Generated from screenshots", type: "string", subtype: "text" },
           complexity: { time: "N/A", space: "N/A" },
           test_cases: [] as any[],
           validation_type: "manual",
@@ -67,10 +73,22 @@ export class ProcessingHelper {
 
         // Generate solution and emit SOLUTION_SUCCESS
         const solution = await this.llmHelper.generateSolution(problemInfo, signal)
+
+        // Store the solution code for accurate debug diffs later
+        if (solution?.solution?.code) {
+          this.appState.setCurrentSolutionCode(solution.solution.code)
+        }
+
         mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.SOLUTION_SUCCESS, solution)
       } catch (error: any) {
         console.error("Image processing error:", error)
-        mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.INITIAL_SOLUTION_ERROR, error.message)
+
+        // Check for auth errors and emit UNAUTHORIZED event
+        if (error.isAuthError) {
+          mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.UNAUTHORIZED)
+        } else {
+          mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.INITIAL_SOLUTION_ERROR, error.message)
+        }
       } finally {
         this.currentProcessingAbortController = null
       }
@@ -95,9 +113,11 @@ export class ProcessingHelper {
           throw new Error("No problem info available")
         }
 
-        // Get current solution from state
-        const currentSolution = await this.llmHelper.generateSolution(problemInfo, debugSignal)
-        const oldCode = currentSolution.solution.code
+        // Get stored solution code (don't regenerate - use what was displayed)
+        const oldCode = this.appState.getCurrentSolutionCode()
+        if (!oldCode) {
+          throw new Error("No current solution available for debugging")
+        }
 
         // Debug the solution using vision model
         const debugResult = await this.llmHelper.debugSolutionWithImages(
@@ -126,10 +146,16 @@ export class ProcessingHelper {
         )
       } catch (error: any) {
         console.error("Debug processing error:", error)
-        mainWindow.webContents.send(
-          this.appState.PROCESSING_EVENTS.DEBUG_ERROR,
-          error.message
-        )
+
+        // Check for auth errors and emit UNAUTHORIZED event
+        if (error.isAuthError) {
+          mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.UNAUTHORIZED)
+        } else {
+          mainWindow.webContents.send(
+            this.appState.PROCESSING_EVENTS.DEBUG_ERROR,
+            error.message
+          )
+        }
       } finally {
         this.currentExtraProcessingAbortController = null
       }
