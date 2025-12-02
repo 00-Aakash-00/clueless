@@ -107,7 +107,7 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
     const loadCurrentModel = async () => {
       try {
         const config = await window.electronAPI.getCurrentLlmConfig();
-        setCurrentModel({ provider: config.provider, model: config.model });
+        setCurrentModel({ provider: "groq", model: config.model });
       } catch (error) {
         console.error('Error loading current model config:', error);
       }
@@ -241,6 +241,16 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
               onSettingsToggle={handleSettingsToggle}
             />
           </div>
+          {/* Screenshot Queue Display */}
+          {screenshots.length > 0 && (
+            <div className="mt-4">
+              <ScreenshotQueue
+                isLoading={false}
+                screenshots={screenshots}
+                onDeleteScreenshot={handleDeleteScreenshot}
+              />
+            </div>
+          )}
           {/* Conditional Settings Interface */}
           {isSettingsOpen && (
             <div className="mt-4 w-full mx-auto">

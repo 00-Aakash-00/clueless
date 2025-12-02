@@ -65,7 +65,7 @@ export class ProcessingHelper {
           output_format: { description: "Generated from screenshots", type: "string", subtype: "text" },
           complexity: { time: "N/A", space: "N/A" },
           test_cases: [] as any[],
-          validation_type: "manual",
+          validation_type: "auto_extracted",
           difficulty: "custom"
         }
         mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.PROBLEM_EXTRACTED, problemInfo)
@@ -82,6 +82,9 @@ export class ProcessingHelper {
         mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.SOLUTION_SUCCESS, solution)
       } catch (error: any) {
         console.error("Image processing error:", error)
+
+        // Reset view back to queue on any error during initial processing
+        this.appState.setView("queue")
 
         // Check for auth errors and emit UNAUTHORIZED event
         if (error.isAuthError) {
@@ -149,8 +152,11 @@ export class ProcessingHelper {
 
         // Check for auth errors and emit UNAUTHORIZED event
         if (error.isAuthError) {
+          // Reset view to queue on auth errors (user needs to fix API key)
+          this.appState.setView("queue")
           mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.UNAUTHORIZED)
         } else {
+          // Non-auth debug errors: stay in solutions view, just show error
           mainWindow.webContents.send(
             this.appState.PROCESSING_EVENTS.DEBUG_ERROR,
             error.message
