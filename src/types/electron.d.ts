@@ -65,6 +65,7 @@ export interface ElectronAPI {
 	) => () => void;
 	onUnauthorized: (callback: () => void) => () => void;
 	onDebugError: (callback: (error: string) => void) => () => void;
+	onFocusChat: (callback: () => void) => () => void;
 	takeScreenshot: () => Promise<void>;
 	moveWindowLeft: () => Promise<void>;
 	moveWindowRight: () => Promise<void>;

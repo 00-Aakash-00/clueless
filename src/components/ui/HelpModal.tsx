@@ -108,6 +108,11 @@ export const HelpModal: React.FC<HelpModalProps> = ({ variant = "queue" }) => {
 								keys={["⌘", "R"]}
 								description="Clear everything and start fresh"
 							/>
+							<ShortcutRow
+								label="Focus Chat"
+								keys={["⌘", "K"]}
+								description="Open chat and start typing"
+							/>
 						</div>
 					</Section>
 

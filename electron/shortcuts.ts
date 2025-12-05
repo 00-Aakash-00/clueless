@@ -96,6 +96,17 @@ export class ShortcutsHelper {
 			}
 		});
 
+		globalShortcut.register("CommandOrControl+K", () => {
+			const mainWindow = this.appState.getMainWindow();
+			if (mainWindow && !mainWindow.isDestroyed()) {
+				// Show window first if hidden
+				if (!this.appState.isVisible()) {
+					this.appState.toggleMainWindow();
+				}
+				mainWindow.webContents.send("focus-chat");
+			}
+		});
+
 		// Unregister shortcuts when quitting
 		app.on("will-quit", () => {
 			globalShortcut.unregisterAll();

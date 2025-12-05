@@ -85,6 +85,7 @@ declare global {
 
 			onDebugStart: (callback: () => void) => () => void;
 			onDebugError: (callback: (error: string) => void) => () => void;
+			onFocusChat: (callback: () => void) => () => void;
 
 			moveWindowLeft: () => Promise<void>;
 			moveWindowRight: () => Promise<void>;

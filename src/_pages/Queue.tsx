@@ -167,6 +167,13 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 					"neutral",
 				);
 			}),
+			window.electronAPI.onFocusChat(() => {
+				setIsChatOpen(true);
+				// Use setTimeout to ensure chat is rendered before focusing
+				setTimeout(() => {
+					chatInputRef.current?.focus();
+				}, 50);
+			}),
 		];
 
 		return () => {
