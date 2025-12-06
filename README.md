@@ -77,6 +77,7 @@ npm run dist
 |----------|--------|
 | `Cmd + B` | Toggle window visibility (show/hide) |
 | `Cmd + H` | Take screenshot for AI analysis |
+| `Cmd + K` | Open chat and focus input |
 | `Cmd + Enter` | Process screenshots and get solution |
 | `Cmd + R` | Reset/Cancel current operation |
 | `Cmd + Arrow Keys` | Move window around screen |
@@ -160,6 +161,7 @@ npm run dist
 |----------|--------|
 | `Ctrl + B` | Toggle window visibility (show/hide) |
 | `Ctrl + H` | Take screenshot for AI analysis |
+| `Ctrl + K` | Open chat and focus input |
 | `Ctrl + Enter` | Process screenshots and get solution |
 | `Ctrl + R` | Reset/Cancel current operation |
 | `Ctrl + Arrow Keys` | Move window around screen |
