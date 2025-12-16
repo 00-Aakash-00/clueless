@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "react-query";
 import QueueCommands from "../components/Queue/QueueCommands";
 import ScreenshotQueue from "../components/Queue/ScreenshotQueue";
+import CustomizePanel from "../components/ui/CustomizePanel";
+import { HelpPanel } from "../components/ui/HelpModal";
 import MarkdownRenderer from "../components/ui/MarkdownRenderer";
 import ModelSelector from "../components/ui/ModelSelector";
 import {
@@ -15,7 +17,7 @@ import {
 
 interface QueueProps {
 	setView: React.Dispatch<
-		React.SetStateAction<"queue" | "solutions" | "debug">
+		React.SetStateAction<"queue" | "solutions">
 	>;
 }
 
@@ -38,12 +40,22 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 	const chatInputRef = useRef<HTMLInputElement>(null);
 
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+	const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
+	const [isHelpOpen, setIsHelpOpen] = useState(false);
 	const [currentModel, setCurrentModel] = useState<{
 		provider: string;
 		model: string;
 	}>({ provider: "groq", model: "openai/gpt-oss-20b" });
 
 	const barRef = useRef<HTMLDivElement>(null);
+
+	const showToast = useCallback(
+		(title: string, description: string, variant: ToastVariant) => {
+			setToastMessage({ title, description, variant });
+			setToastOpen(true);
+		},
+		[],
+	);
 
 	const { data: screenshots = [], refetch } = useQuery<
 		Array<{ path: string; preview: string }>,
@@ -66,14 +78,6 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 			refetchOnWindowFocus: true,
 			refetchOnMount: true,
 		},
-	);
-
-	const showToast = useCallback(
-		(title: string, description: string, variant: ToastVariant) => {
-			setToastMessage({ title, description, variant });
-			setToastOpen(true);
-		},
-		[],
 	);
 
 	const handleDeleteScreenshot = async (index: number) => {
@@ -101,7 +105,7 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 		setChatLoading(true);
 		setChatInput("");
 		try {
-			const response = await window.electronAPI.invoke("groq-chat", chatInput);
+			const response = await window.electronAPI.groqChat(chatInput);
 			setChatMessages((msgs) => [
 				...msgs,
 				{ role: "assistant", text: String(response) },
@@ -149,7 +153,6 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 		updateDimensions();
 
 		const cleanupFunctions = [
-			window.electronAPI.onScreenshotTaken(() => refetch()),
 			window.electronAPI.onResetView(() => refetch()),
 			window.electronAPI.onSolutionError((error: string) => {
 				showToast(
@@ -188,6 +191,16 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 	useEffect(() => {
 		// Listen for screenshot taken event
 		const unsubscribe = window.electronAPI.onScreenshotTaken(async (data) => {
+			// Surface chat immediately so the user sees the context grow
+			setIsChatOpen(true);
+			setChatMessages((msgs) => [
+				...msgs,
+				{
+					role: "assistant",
+					text: "📸 Added your screenshot to this session. Reading it now...",
+				},
+			]);
+
 			// Refetch screenshots to update the queue
 			await refetch();
 			// Show loading in chat
@@ -201,19 +214,29 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 						data[data.length - 1]?.path);
 				if (latest) {
 					// Call the LLM to process the screenshot
-					const response = (await window.electronAPI.invoke(
-						"analyze-image-file",
+					const response = (await window.electronAPI.analyzeImageFile(
 						latest,
 					)) as { text: string; timestamp: number };
 					setChatMessages((msgs) => [
 						...msgs,
 						{ role: "assistant", text: response.text },
 					]);
+				} else {
+					setChatMessages((msgs) => [
+						...msgs,
+						{
+							role: "assistant",
+							text: "I captured a screenshot but could not locate the file to analyze it.",
+						},
+					]);
 				}
 			} catch (err) {
 				setChatMessages((msgs) => [
 					...msgs,
-					{ role: "assistant", text: `Error: ${String(err)}` },
+					{
+						role: "assistant",
+						text: `Error while analyzing the screenshot: ${String(err)}`,
+					},
 				]);
 			} finally {
 				setChatLoading(false);
@@ -230,6 +253,29 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 
 	const handleSettingsToggle = () => {
 		setIsSettingsOpen(!isSettingsOpen);
+		// Close other panels when opening settings
+		if (!isSettingsOpen) {
+			setIsCustomizeOpen(false);
+			setIsHelpOpen(false);
+		}
+	};
+
+	const handleCustomizeToggle = () => {
+		setIsCustomizeOpen(!isCustomizeOpen);
+		// Close other panels when opening customize
+		if (!isCustomizeOpen) {
+			setIsSettingsOpen(false);
+			setIsHelpOpen(false);
+		}
+	};
+
+	const handleHelpToggle = () => {
+		setIsHelpOpen(!isHelpOpen);
+		// Close other panels when opening help
+		if (!isHelpOpen) {
+			setIsSettingsOpen(false);
+			setIsCustomizeOpen(false);
+		}
 	};
 
 	const handleModelChange = (model: string) => {
@@ -264,11 +310,13 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 						<ToastTitle>{toastMessage.title}</ToastTitle>
 						<ToastDescription>{toastMessage.description}</ToastDescription>
 					</Toast>
-					<div className="w-fit">
+					<div className="inline-block">
 						<QueueCommands
 							screenshots={screenshots}
 							onChatToggle={handleChatToggle}
 							onSettingsToggle={handleSettingsToggle}
+							onCustomizeToggle={handleCustomizeToggle}
+							onHelpToggle={handleHelpToggle}
 						/>
 					</div>
 					{/* Screenshot Queue Display */}
@@ -291,19 +339,33 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 						</div>
 					)}
 
+					{/* Conditional Customize Interface */}
+					{isCustomizeOpen && (
+						<div className="mt-4 w-full mx-auto">
+							<CustomizePanel onClose={() => setIsCustomizeOpen(false)} />
+						</div>
+					)}
+
+					{/* Conditional Help Panel */}
+					{isHelpOpen && (
+						<div className="mt-4 w-full mx-auto">
+							<HelpPanel variant="queue" onClose={() => setIsHelpOpen(false)} />
+						</div>
+					)}
+
 					{/* Conditional Chat Interface */}
 					{isChatOpen && (
-						<div className="mt-4 w-full mx-auto glass-card p-4 flex flex-col">
-							<div className="flex-1 overflow-y-auto mb-3 p-3 rounded-xl glass-card-light max-h-64 min-h-[120px] glass-content">
+						<div className="mt-4 w-full mx-auto bg-black/60 backdrop-blur-xl border border-white/20 rounded-2xl p-4 flex flex-col">
+							<div className="flex-1 overflow-y-auto mb-3 p-3 rounded-lg bg-white/5 max-h-64 min-h-[120px]">
 								{chatMessages.length === 0 ? (
-									<div className="text-sm text-gray-600 text-center mt-8">
+									<div className="text-xs text-white/60 text-center mt-8">
 										Chat with {currentModel.model}
 										<br />
-										<span className="text-xs text-gray-500">
+										<span className="text-[10px] text-white/40">
 											Take a screenshot (Cmd+H) for automatic analysis
 										</span>
 										<br />
-										<span className="text-xs text-gray-500">
+										<span className="text-[10px] text-white/40">
 											Click Models to switch AI models
 										</span>
 									</div>
@@ -314,17 +376,17 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 											className={`w-full flex ${msg.role === "user" ? "justify-end" : "justify-start"} mb-3`}
 										>
 											<div
-												className={`max-w-[85%] px-3 py-2 shadow-md ${
+												className={`max-w-[85%] px-3 py-2 rounded-lg ${
 													msg.role === "user"
-														? "chat-message-user ml-8"
-														: "chat-message-assistant mr-8"
+														? "bg-white/20 text-white ml-8"
+														: "bg-white/5 text-white/90 mr-8"
 												}`}
 												style={{ wordBreak: "break-word" }}
 											>
 												{msg.role === "assistant" ? (
 													<MarkdownRenderer
 														content={msg.text}
-														variant="dark"
+														variant="glass"
 														className="text-xs"
 													/>
 												) : (
@@ -336,14 +398,14 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 								)}
 								{chatLoading && (
 									<div className="flex justify-start mb-3">
-										<div className="chat-message-assistant px-3 py-2 shadow-md mr-8">
+										<div className="bg-white/5 text-white/90 px-3 py-2 rounded-lg mr-8">
 											<span className="inline-flex items-center text-xs">
 												<span className="loading-dots">
-													<span className="text-gray-400">●</span>
-													<span className="text-gray-400">●</span>
-													<span className="text-gray-400">●</span>
+													<span className="text-white/40">●</span>
+													<span className="text-white/40">●</span>
+													<span className="text-white/40">●</span>
 												</span>
-												<span className="ml-2 text-gray-600">
+												<span className="ml-2 text-white/50">
 													{currentModel.model} is replying...
 												</span>
 											</span>
@@ -352,7 +414,7 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 								)}
 							</div>
 							<form
-								className="flex gap-2 items-center glass-content"
+								className="flex gap-2 items-center"
 								onSubmit={(e) => {
 									e.preventDefault();
 									handleChatSend();
@@ -360,7 +422,7 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 							>
 								<input
 									ref={chatInputRef}
-									className="flex-1 rounded-xl px-3 py-2 bg-white/30 backdrop-blur-md text-gray-800 placeholder-gray-500 text-xs focus:outline-none focus:ring-2 focus:ring-white/40 border border-white/40 shadow-lg transition-all duration-200"
+									className="flex-1 rounded-lg px-3 py-2 bg-white/10 text-white text-xs placeholder-white/40 border border-white/20 focus:outline-none focus:border-white/40 transition-colors"
 									placeholder="Type your message..."
 									value={chatInput}
 									onChange={(e) => setChatInput(e.target.value)}
@@ -368,7 +430,7 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 								/>
 								<button
 									type="submit"
-									className="p-2 rounded-xl bg-gray-700/80 hover:bg-gray-800/80 border border-white/20 flex items-center justify-center transition-all duration-200 backdrop-blur-sm shadow-lg disabled:opacity-50"
+									className="p-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 flex items-center justify-center transition-colors disabled:opacity-50"
 									disabled={chatLoading || !chatInput.trim()}
 									tabIndex={-1}
 									aria-label="Send"
@@ -378,8 +440,8 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 										fill="none"
 										viewBox="0 0 24 24"
 										strokeWidth={2}
-										stroke="white"
-										className="w-4 h-4"
+										stroke="currentColor"
+										className="w-4 h-4 text-white/70"
 										aria-hidden="true"
 									>
 										<path

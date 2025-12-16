@@ -13,8 +13,9 @@
 		"noUnusedLocals": false,
 		"noUnusedParameters": true,
 		"noFallthroughCasesInSwitch": true,
-		"skipLibCheck": true
+		"skipLibCheck": true,
+		"typeRoots": ["./src/types", "./node_modules/@types"]
 	},
-	"include": ["src"], // Only React source files
+	"include": ["src", "src/types/*.d.ts"], // Only React source files
 	"references": [{ "path": "./tsconfig.node.json" }]
 }

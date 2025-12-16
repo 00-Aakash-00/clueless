@@ -43,6 +43,35 @@ interface SolutionSuccessData {
 	};
 }
 
+// Customization config types
+interface StoredDocument {
+	id: string;
+	name: string;
+	type: string;
+	addedAt: number;
+}
+
+// About You entry - persisted locally
+interface AboutYouEntry {
+	id: string;
+	title: string;
+	content: string;
+	type: "text" | "file";
+	filePath?: string;
+	fileName?: string;
+	supermemoryId?: string;
+	addedAt: number;
+}
+
+interface CustomizeConfig {
+	role: string;
+	customRoleText: string;
+	textContext: string;
+	documents: StoredDocument[];
+	userFacts: string[];
+	aboutYou: AboutYouEntry[];
+}
+
 // Types for the exposed Electron API
 interface ElectronAPI {
 	updateContentDimensions: (dimensions: {
@@ -72,7 +101,7 @@ interface ElectronAPI {
 	onUnauthorized: (callback: () => void) => () => void;
 	onDebugError: (callback: (error: string) => void) => () => void;
 	onFocusChat: (callback: () => void) => () => void;
-	takeScreenshot: () => Promise<void>;
+	takeScreenshot: () => Promise<{ path: string; preview: string }>;
 	moveWindowLeft: () => Promise<void>;
 	moveWindowRight: () => Promise<void>;
 	moveWindowUp: () => Promise<void>;
@@ -80,6 +109,7 @@ interface ElectronAPI {
 	analyzeImageFile: (
 		path: string,
 	) => Promise<{ text: string; timestamp: number }>;
+	groqChat: (message: string) => Promise<string>;
 	quitApp: () => Promise<void>;
 
 	// LLM Model Management
@@ -93,7 +123,87 @@ interface ElectronAPI {
 	switchModel: (model: string) => Promise<{ success: boolean; error?: string }>;
 	testLlmConnection: () => Promise<{ success: boolean; error?: string }>;
 
-	invoke: (channel: string, ...args: unknown[]) => Promise<unknown>;
+	// Customization APIs
+	getCustomizeConfig: () => Promise<CustomizeConfig | null>;
+	getRolePresets: () => Promise<Record<string, string>>;
+	setRole: (
+		role: string,
+		customText?: string,
+	) => Promise<{ success: boolean; error?: string }>;
+	setTextContext: (
+		text: string,
+	) => Promise<{ success: boolean; error?: string }>;
+	setUserFacts: (
+		facts: string[],
+	) => Promise<{ success: boolean; error?: string }>;
+	uploadDocumentData: (payload: {
+		name: string;
+		data: Uint8Array;
+		mimeType?: string;
+	}) => Promise<{
+		success: boolean;
+		data?: { id: string; status: string };
+		error?: string;
+	}>;
+	addTextMemory: (
+		content: string,
+	) => Promise<{
+		success: boolean;
+		data?: { id: string; status: string };
+		error?: string;
+	}>;
+	searchMemories: (
+		query: string,
+	) => Promise<{
+		success: boolean;
+		data?: { results: unknown[]; total: number };
+		error?: string;
+	}>;
+	deleteDocument: (
+		documentId: string,
+	) => Promise<{ success: boolean; error?: string }>;
+	getDocuments: () => Promise<StoredDocument[]>;
+	getUserProfile: () => Promise<{
+		static: string[];
+		dynamic: string[];
+	} | null>;
+	resetCustomization: () => Promise<{ success: boolean; error?: string }>;
+
+	// About You APIs
+	getAboutYouEntries: () => Promise<AboutYouEntry[]>;
+	addAboutYouTextEntry: (
+		title: string,
+		content: string,
+	) => Promise<{
+		success: boolean;
+		data?: AboutYouEntry;
+		error?: string;
+	}>;
+	addAboutYouFileEntryData: (payload: {
+		title: string;
+		name: string;
+		data: Uint8Array;
+		mimeType?: string;
+	}) => Promise<{
+		success: boolean;
+		data?: AboutYouEntry;
+		error?: string;
+	}>;
+	updateAboutYouEntry: (
+		id: string,
+		title: string,
+		content: string,
+	) => Promise<{
+		success: boolean;
+		data?: AboutYouEntry;
+		error?: string;
+	}>;
+	deleteAboutYouEntry: (
+		id: string,
+	) => Promise<{ success: boolean; error?: string }>;
+
+	// Full reset (deletes all Supermemory data)
+	fullResetCustomization: () => Promise<{ success: boolean; error?: string }>;
 }
 
 export const PROCESSING_EVENTS = {
@@ -237,6 +347,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	moveWindowDown: () => ipcRenderer.invoke("move-window-down"),
 	analyzeImageFile: (path: string) =>
 		ipcRenderer.invoke("analyze-image-file", path),
+	groqChat: (message: string) => ipcRenderer.invoke("groq-chat", message),
 	quitApp: () => ipcRenderer.invoke("quit-app"),
 
 	// LLM Model Management
@@ -245,6 +356,45 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	switchModel: (model: string) => ipcRenderer.invoke("switch-model", model),
 	testLlmConnection: () => ipcRenderer.invoke("test-llm-connection"),
 
-	invoke: (channel: string, ...args: unknown[]) =>
-		ipcRenderer.invoke(channel, ...args),
+	// Customization APIs
+	getCustomizeConfig: () => ipcRenderer.invoke("get-customize-config"),
+	getRolePresets: () => ipcRenderer.invoke("get-role-presets"),
+	setRole: (role: string, customText?: string) =>
+		ipcRenderer.invoke("set-role", role, customText),
+	setTextContext: (text: string) =>
+		ipcRenderer.invoke("set-text-context", text),
+	setUserFacts: (facts: string[]) =>
+		ipcRenderer.invoke("set-user-facts", facts),
+	uploadDocumentData: (payload: {
+		name: string;
+		data: Uint8Array;
+		mimeType?: string;
+	}) => ipcRenderer.invoke("upload-document-data", payload),
+	addTextMemory: (content: string) =>
+		ipcRenderer.invoke("add-text-memory", content),
+	searchMemories: (query: string) =>
+		ipcRenderer.invoke("search-memories", query),
+	deleteDocument: (documentId: string) =>
+		ipcRenderer.invoke("delete-document", documentId),
+	getDocuments: () => ipcRenderer.invoke("get-documents"),
+	getUserProfile: () => ipcRenderer.invoke("get-user-profile"),
+	resetCustomization: () => ipcRenderer.invoke("reset-customization"),
+
+	// About You APIs
+	getAboutYouEntries: () => ipcRenderer.invoke("get-about-you-entries"),
+	addAboutYouTextEntry: (title: string, content: string) =>
+		ipcRenderer.invoke("add-about-you-text-entry", title, content),
+	addAboutYouFileEntryData: (payload: {
+		title: string;
+		name: string;
+		data: Uint8Array;
+		mimeType?: string;
+	}) => ipcRenderer.invoke("add-about-you-file-entry-data", payload),
+	updateAboutYouEntry: (id: string, title: string, content: string) =>
+		ipcRenderer.invoke("update-about-you-entry", id, title, content),
+	deleteAboutYouEntry: (id: string) =>
+		ipcRenderer.invoke("delete-about-you-entry", id),
+
+	// Full reset (deletes all Supermemory data)
+	fullResetCustomization: () => ipcRenderer.invoke("full-reset-customization"),
 } as ElectronAPI);

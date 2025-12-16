@@ -1,21 +1,24 @@
 import type React from "react";
 import { IoLogOutOutline } from "react-icons/io5";
-import { HelpModal } from "../ui/HelpModal";
 
 interface QueueCommandsProps {
 	screenshots: Array<{ path: string; preview: string }>;
 	onChatToggle: () => void;
 	onSettingsToggle: () => void;
+	onCustomizeToggle: () => void;
+	onHelpToggle: () => void;
 }
 
 const QueueCommands: React.FC<QueueCommandsProps> = ({
 	screenshots,
 	onChatToggle,
 	onSettingsToggle,
+	onCustomizeToggle,
+	onHelpToggle,
 }) => {
 	return (
-		<div className="w-fit">
-			<div className="text-xs text-white/90 liquid-glass-bar py-1 px-4 flex items-center justify-center gap-4 draggable-area">
+		<div>
+			<div className="text-xs text-white/90 bg-black/60 backdrop-blur-xl border border-white/20 rounded-2xl py-2 px-4 flex items-center gap-4 draggable-area whitespace-nowrap">
 				{/* Show/Hide */}
 				<div className="flex items-center gap-2">
 					<span className="text-[11px] leading-none">Show/Hide</span>
@@ -66,8 +69,27 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
 					</button>
 				</div>
 
-				{/* Help Modal */}
-				<HelpModal variant="queue" />
+				{/* Customize Button */}
+				<div className="flex items-center gap-2">
+					<button
+						className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-2 py-1 text-[11px] leading-none text-white/70 flex items-center gap-1"
+						onClick={onCustomizeToggle}
+						type="button"
+					>
+						Customize
+					</button>
+				</div>
+
+				{/* Help Button */}
+				<div className="flex items-center gap-2">
+					<button
+						className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-2 py-1 text-[11px] leading-none text-white/70 flex items-center gap-1"
+						onClick={onHelpToggle}
+						type="button"
+					>
+						Help
+					</button>
+				</div>
 
 				{/* Separator */}
 				<div className="mx-2 h-4 w-px bg-white/20" />

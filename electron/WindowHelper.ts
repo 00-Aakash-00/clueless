@@ -15,6 +15,15 @@ export class WindowHelper {
 	private windowSize: { width: number; height: number } | null = null;
 	private appState: AppState;
 
+	private static readonly BASE_WINDOW_WIDTH = 700;
+	private static readonly BASE_WINDOW_HEIGHT = 600;
+	private static readonly BASE_MIN_WIDTH = 500;
+	private static readonly BASE_MIN_HEIGHT = 200;
+
+	private static readonly WINDOW_WIDTH_SCALE = 1.1;
+	private static readonly WINDOW_HEIGHT_SCALE = 1.2;
+	private static readonly CONTENT_WIDTH_PADDING_PX = 32;
+
 	// Initialize with explicit number type and 0 value
 	private screenWidth: number = 0;
 	private screenHeight: number = 0;
@@ -36,31 +45,57 @@ export class WindowHelper {
 		const primaryDisplay = screen.getPrimaryDisplay();
 		const workArea = primaryDisplay.workAreaSize;
 
-		// Use 75% width if debugging has occurred, otherwise use 60%
-		const maxAllowedWidth = Math.floor(
-			workArea.width * (this.appState.getHasDebugged() ? 0.75 : 0.5),
+		// Base width cap is 95% when debugging, otherwise 90% (then apply scaling).
+		const baseMaxWidthFactor = this.appState.getHasDebugged() ? 0.95 : 0.9;
+		const maxWidthFactor = Math.min(
+			1,
+			baseMaxWidthFactor * WindowHelper.WINDOW_WIDTH_SCALE,
 		);
+		const minWidth = Math.min(
+			Math.round(WindowHelper.BASE_MIN_WIDTH * WindowHelper.WINDOW_WIDTH_SCALE),
+			workArea.width,
+		);
+		const minHeight = Math.min(
+			Math.round(WindowHelper.BASE_MIN_HEIGHT * WindowHelper.WINDOW_HEIGHT_SCALE),
+			workArea.height,
+		);
+		const maxAllowedWidth = Math.max(
+			minWidth,
+			Math.floor(workArea.width * maxWidthFactor),
+		);
+		const maxAllowedHeight = workArea.height;
 
 		// Ensure width doesn't exceed max allowed width and height is reasonable
-		const newWidth = Math.min(width + 32, maxAllowedWidth);
-		const newHeight = Math.ceil(height);
+		const targetWidth = Math.ceil(
+			(width + WindowHelper.CONTENT_WIDTH_PADDING_PX) *
+				WindowHelper.WINDOW_WIDTH_SCALE,
+		);
+		const targetHeight = Math.ceil(height * WindowHelper.WINDOW_HEIGHT_SCALE);
+		const newWidth = Math.min(Math.max(targetWidth, minWidth), maxAllowedWidth);
+		const newHeight = Math.min(
+			Math.max(targetHeight, minHeight),
+			maxAllowedHeight,
+		);
 
 		// Center the window horizontally if it would go off screen
 		const maxX = workArea.width - newWidth;
 		const newX = Math.min(Math.max(currentX, 0), maxX);
+		const maxY = workArea.height - newHeight;
+		const newY = Math.min(Math.max(currentY, 0), maxY);
 
 		// Update window bounds
 		this.mainWindow.setBounds({
 			x: newX,
-			y: currentY,
+			y: newY,
 			width: newWidth,
 			height: newHeight,
 		});
 
 		// Update internal state
-		this.windowPosition = { x: newX, y: currentY };
+		this.windowPosition = { x: newX, y: newY };
 		this.windowSize = { width: newWidth, height: newHeight };
 		this.currentX = newX;
+		this.currentY = newY;
 	}
 
 	public createWindow(): void {
@@ -72,13 +107,40 @@ export class WindowHelper {
 		this.screenHeight = workArea.height;
 		this.step = 50; // Move 50 pixels per key press
 
+		const minWidth = Math.min(
+			Math.round(WindowHelper.BASE_MIN_WIDTH * WindowHelper.WINDOW_WIDTH_SCALE),
+			workArea.width,
+		);
+		const minHeight = Math.min(
+			Math.round(WindowHelper.BASE_MIN_HEIGHT * WindowHelper.WINDOW_HEIGHT_SCALE),
+			workArea.height,
+		);
+		const initialWidth = Math.max(
+			minWidth,
+			Math.min(
+				Math.round(
+					WindowHelper.BASE_WINDOW_WIDTH * WindowHelper.WINDOW_WIDTH_SCALE,
+				),
+				workArea.width,
+			),
+		);
+		const initialHeight = Math.max(
+			minHeight,
+			Math.min(
+				Math.round(
+					WindowHelper.BASE_WINDOW_HEIGHT * WindowHelper.WINDOW_HEIGHT_SCALE,
+				),
+				workArea.height,
+			),
+		);
+
 		const windowSettings: Electron.BrowserWindowConstructorOptions = {
-			width: 400,
-			height: 600,
-			minWidth: 300,
-			minHeight: 200,
+			width: initialWidth,
+			height: initialHeight,
+			minWidth,
+			minHeight,
 			webPreferences: {
-				nodeIntegration: true,
+				nodeIntegration: false,
 				contextIsolation: true,
 				preload: path.join(__dirname, "preload.js"),
 			},

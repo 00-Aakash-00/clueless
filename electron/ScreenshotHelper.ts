@@ -28,10 +28,10 @@ export class ScreenshotHelper {
 
 		// Create directories if they don't exist
 		if (!fs.existsSync(this.screenshotDir)) {
-			fs.mkdirSync(this.screenshotDir);
+			fs.mkdirSync(this.screenshotDir, { recursive: true });
 		}
 		if (!fs.existsSync(this.extraScreenshotDir)) {
-			fs.mkdirSync(this.extraScreenshotDir);
+			fs.mkdirSync(this.extraScreenshotDir, { recursive: true });
 		}
 	}
 
@@ -119,9 +119,10 @@ export class ScreenshotHelper {
 			}
 
 			return screenshotPath;
-		} catch (error) {
+		} catch (error: unknown) {
 			console.error("Error taking screenshot:", error);
-			throw new Error(`Failed to take screenshot: ${error.message}`);
+			const message = error instanceof Error ? error.message : String(error);
+			throw new Error(`Failed to take screenshot: ${message}`);
 		} finally {
 			// Ensure window is always shown again
 			showMainWindow();
@@ -139,23 +140,42 @@ export class ScreenshotHelper {
 	}
 
 	public async deleteScreenshot(
-		path: string,
+		filePath: string,
 	): Promise<{ success: boolean; error?: string }> {
 		try {
-			await fs.promises.unlink(path);
-			if (this.view === "queue") {
+			const inMainQueue = this.screenshotQueue.includes(filePath);
+			const inExtraQueue = this.extraScreenshotQueue.includes(filePath);
+
+			if (!inMainQueue && !inExtraQueue) {
+				return { success: false, error: "Screenshot not found in queue" };
+			}
+
+			try {
+				await fs.promises.unlink(filePath);
+			} catch (error: unknown) {
+				// Treat missing files as already-deleted so local state can recover.
+				const code = (error as { code?: string } | null)?.code;
+				if (code !== "ENOENT") {
+					throw error;
+				}
+			}
+
+			if (inMainQueue) {
 				this.screenshotQueue = this.screenshotQueue.filter(
-					(filePath) => filePath !== path,
+					(p) => p !== filePath,
 				);
-			} else {
+			}
+			if (inExtraQueue) {
 				this.extraScreenshotQueue = this.extraScreenshotQueue.filter(
-					(filePath) => filePath !== path,
+					(p) => p !== filePath,
 				);
 			}
 			return { success: true };
-		} catch (error) {
+		} catch (error: unknown) {
 			console.error("Error deleting file:", error);
-			return { success: false, error: error.message };
+			const message =
+				error instanceof Error ? error.message : "Unknown error occurred";
+			return { success: false, error: message };
 		}
 	}
 }

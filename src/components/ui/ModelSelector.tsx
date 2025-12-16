@@ -82,22 +82,22 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 	const getStatusColor = () => {
 		switch (connectionStatus) {
 			case "testing":
-				return "text-yellow-600";
+				return "text-yellow-300";
 			case "success":
-				return "text-green-600";
+				return "text-green-300";
 			case "error":
-				return "text-red-600";
+				return "text-red-300";
 			default:
-				return "text-gray-600";
+				return "text-white/50";
 		}
 	};
 
 	const getStatusText = () => {
 		switch (connectionStatus) {
 			case "testing":
-				return "Testing connection...";
+				return "Testing...";
 			case "success":
-				return "Connected successfully";
+				return "Connected";
 			case "error":
 				return `Error: ${errorMessage}`;
 			default:
@@ -118,8 +118,8 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 
 	if (isLoading) {
 		return (
-			<div className="p-4 glass-card">
-				<div className="text-sm text-gray-600">
+			<div className="bg-black/60 backdrop-blur-xl border border-white/20 rounded-2xl p-4">
+				<div className="text-xs text-white/60">
 					Loading model configuration...
 				</div>
 			</div>
@@ -127,9 +127,9 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 	}
 
 	return (
-		<div className="p-4 glass-card space-y-4">
+		<div className="bg-black/60 backdrop-blur-xl border border-white/20 rounded-2xl p-4 space-y-4">
 			<div className="flex items-center justify-between">
-				<h3 className="text-sm font-semibold text-gray-800">
+				<h3 className="text-sm font-medium text-white/90">
 					AI Model Selection
 				</h3>
 				<div className={`text-xs ${getStatusColor()}`}>{getStatusText()}</div>
@@ -137,7 +137,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 
 			{/* Current Status */}
 			{currentConfig && (
-				<div className="text-xs text-gray-600 bg-white/30 p-2 rounded-lg space-y-1">
+				<div className="text-xs text-white/60 bg-white/5 p-2 rounded-lg space-y-1">
 					<div>Text Model: {getModelDisplayName(currentConfig.model)}</div>
 					<div>Vision Model: {currentConfig.visionModel}</div>
 				</div>
@@ -145,17 +145,17 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 
 			{/* Model Selection */}
 			<div className="space-y-2">
-				<span className="text-xs font-medium text-gray-700 block">
+				<span className="text-xs font-medium text-white/80 block">
 					Text Model
 				</span>
 				<div className="flex gap-2">
 					<button
 						type="button"
 						onClick={() => setSelectedModel("openai/gpt-oss-20b")}
-						className={`flex-1 px-3 py-2 rounded-xl text-xs transition-all ${
+						className={`flex-1 px-3 py-2 rounded-lg text-xs transition-all ${
 							selectedModel === "openai/gpt-oss-20b"
-								? "bg-blue-500/90 text-white shadow-md"
-								: "bg-white/30 text-gray-700 hover:bg-white/50"
+								? "bg-white/20 text-white border border-white/30"
+								: "bg-white/5 text-white/70 hover:bg-white/10"
 						}`}
 					>
 						GPT-OSS 20B (Fast)
@@ -163,10 +163,10 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 					<button
 						type="button"
 						onClick={() => setSelectedModel("openai/gpt-oss-120b")}
-						className={`flex-1 px-3 py-2 rounded-xl text-xs transition-all ${
+						className={`flex-1 px-3 py-2 rounded-lg text-xs transition-all ${
 							selectedModel === "openai/gpt-oss-120b"
-								? "bg-purple-500/90 text-white shadow-md"
-								: "bg-white/30 text-gray-700 hover:bg-white/50"
+								? "bg-white/20 text-white border border-white/30"
+								: "bg-white/5 text-white/70 hover:bg-white/10"
 						}`}
 					>
 						GPT-OSS 120B (Powerful)
@@ -175,7 +175,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 			</div>
 
 			{/* Vision Model Info */}
-			<div className="text-xs text-gray-600 bg-white/30 p-2 rounded-lg">
+			<div className="text-xs text-white/60 bg-white/5 p-2 rounded-lg">
 				Vision: Llama 4 Scout 17B (used for image analysis)
 			</div>
 
@@ -188,7 +188,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 						connectionStatus === "testing" ||
 						selectedModel === currentConfig?.model
 					}
-					className="flex-1 px-3 py-2 bg-blue-500/90 hover:bg-blue-600/90 disabled:bg-gray-400/80 text-white text-xs rounded-xl transition-all shadow-md backdrop-blur-sm"
+					className="flex-1 px-3 py-2 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:text-white/30 text-white/90 text-xs rounded-lg transition-all"
 				>
 					{connectionStatus === "testing" ? "Switching..." : "Apply Changes"}
 				</button>
@@ -197,14 +197,14 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 					type="button"
 					onClick={testConnection}
 					disabled={connectionStatus === "testing"}
-					className="px-3 py-2 bg-gray-600/80 hover:bg-gray-700/80 disabled:bg-gray-400/80 text-white text-xs rounded-xl transition-all shadow-md backdrop-blur-sm"
+					className="px-3 py-2 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:text-white/30 text-white/90 text-xs rounded-lg transition-all"
 				>
 					Test
 				</button>
 			</div>
 
 			{/* Help text */}
-			<div className="text-xs text-gray-600 space-y-1">
+			<div className="text-xs text-white/40 space-y-1">
 				<div>GPT-OSS 20B: Faster responses, good for most tasks</div>
 				<div>GPT-OSS 120B: More powerful, better for complex problems</div>
 			</div>

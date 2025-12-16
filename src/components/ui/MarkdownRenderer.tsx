@@ -2,7 +2,6 @@ import type React from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { dracula } from "react-syntax-highlighter/dist/esm/styles/prism";
-import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 
 interface MarkdownRendererProps {
@@ -27,7 +26,6 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 		<div className={`${proseClass} ${className}`}>
 			<ReactMarkdown
 				remarkPlugins={[remarkGfm]}
-				rehypePlugins={[rehypeRaw]}
 				components={{
 					code({ node, className: codeClassName, children, ...props }) {
 						const match = /language-(\w+)/.exec(codeClassName || "");
@@ -132,6 +130,17 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 					},
 					// Custom links
 					a({ href, children }) {
+						const rawHref = typeof href === "string" ? href.trim() : "";
+						const lowered = rawHref.toLowerCase();
+						const isUnsafe =
+							lowered.startsWith("javascript:") ||
+							lowered.startsWith("data:") ||
+							lowered.startsWith("vbscript:");
+
+						if (isUnsafe) {
+							return <span>{children}</span>;
+						}
+
 						return (
 							<a
 								href={href}

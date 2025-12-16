@@ -1,13 +1,31 @@
 // ipcHandlers.ts
 
 import { app, ipcMain } from "electron";
+import nodePath from "node:path";
 import type { AppState } from "./main";
 
 export function initializeIpcHandlers(appState: AppState): void {
+	const PERSONALIZATION_UNAVAILABLE =
+		"Personalization unavailable (no Supermemory API key)";
+
+	const coerceToUint8Array = (data: unknown): Uint8Array | null => {
+		if (data instanceof Uint8Array) return data;
+		if (data instanceof ArrayBuffer) return new Uint8Array(data);
+		if (ArrayBuffer.isView(data)) {
+			return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+		}
+		return null;
+	};
+
 	ipcMain.handle(
 		"update-content-dimensions",
 		async (_event, { width, height }: { width: number; height: number }) => {
-			if (width && height) {
+			if (
+				Number.isFinite(width) &&
+				Number.isFinite(height) &&
+				width > 0 &&
+				height > 0
+			) {
 				appState.setWindowDimensions(width, height);
 			}
 		},
@@ -73,9 +91,24 @@ export function initializeIpcHandlers(appState: AppState): void {
 	// IPC handler for analyzing image from file path
 	ipcMain.handle("analyze-image-file", async (_event, path: string) => {
 		try {
-			const result = await appState.processingHelper
-				.getLLMHelper()
-				.analyzeImageFile(path);
+			// Only allow analysis of files created by the app (prevents arbitrary file reads).
+			const userData = app.getPath("userData");
+			const allowedDirs = [
+				nodePath.resolve(nodePath.join(userData, "screenshots")) + nodePath.sep,
+				nodePath.resolve(nodePath.join(userData, "extra_screenshots")) +
+					nodePath.sep,
+			];
+			const resolved = nodePath.resolve(path);
+			const normalizedResolved =
+				process.platform === "win32" ? resolved.toLowerCase() : resolved;
+			const normalizedAllowed = allowedDirs.map((dir) =>
+				process.platform === "win32" ? dir.toLowerCase() : dir,
+			);
+			if (!normalizedAllowed.some((dir) => normalizedResolved.startsWith(dir))) {
+				throw new Error("Invalid image path");
+			}
+
+			const result = await appState.processingHelper.analyzeImageFile(path);
 			return result;
 		} catch (error: unknown) {
 			console.error("Error in analyze-image-file handler:", error);
@@ -85,10 +118,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
 	ipcMain.handle("groq-chat", async (_event, message: string) => {
 		try {
-			const result = await appState.processingHelper
-				.getLLMHelper()
-				.chat(message);
-			return result;
+			return await appState.processingHelper.chat(message);
 		} catch (error: unknown) {
 			console.error("Error in groq-chat handler:", error);
 			throw error;
@@ -168,6 +198,338 @@ export function initializeIpcHandlers(appState: AppState): void {
 			return result;
 		} catch (error: unknown) {
 			console.error("Error testing LLM connection:", error);
+			const message =
+				error instanceof Error ? error.message : "Unknown error occurred";
+			return { success: false, error: message };
+		}
+	});
+
+	// Customization Handlers
+
+	ipcMain.handle("get-customize-config", async () => {
+		try {
+			const config = appState.processingHelper.getCustomizeConfig();
+			return config;
+		} catch (error: unknown) {
+			console.error("Error getting customize config:", error);
+			return null;
+		}
+	});
+
+	ipcMain.handle("get-role-presets", async () => {
+		try {
+			return appState.processingHelper.getRolePresets();
+		} catch (error: unknown) {
+			console.error("Error getting role presets:", error);
+			return {};
+		}
+	});
+
+	ipcMain.handle(
+		"set-role",
+		async (_, role: string, customText?: string) => {
+			try {
+				const result = appState.processingHelper.setRole(role, customText);
+				if (!result) {
+					return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+				}
+				return { success: true };
+			} catch (error: unknown) {
+				console.error("Error setting role:", error);
+				const message =
+					error instanceof Error ? error.message : "Unknown error occurred";
+				return { success: false, error: message };
+			}
+		},
+	);
+
+	ipcMain.handle("set-text-context", async (_, text: string) => {
+		try {
+			const result = appState.processingHelper.setTextContext(text);
+			if (!result) {
+				return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			}
+			return { success: true };
+		} catch (error: unknown) {
+			console.error("Error setting text context:", error);
+			const message =
+				error instanceof Error ? error.message : "Unknown error occurred";
+			return { success: false, error: message };
+		}
+	});
+
+	ipcMain.handle("set-user-facts", async (_, facts: string[]) => {
+		try {
+			const result = appState.processingHelper.setUserFacts(facts);
+			if (!result) {
+				return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			}
+			return { success: true };
+		} catch (error: unknown) {
+			console.error("Error setting user facts:", error);
+			const message =
+				error instanceof Error ? error.message : "Unknown error occurred";
+			return { success: false, error: message };
+		}
+	});
+
+	ipcMain.handle(
+		"upload-document-data",
+		async (_, payload: unknown) => {
+			try {
+				if (!appState.processingHelper.getSupermemoryHelper()) {
+					return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+				}
+				if (!payload || typeof payload !== "object") {
+					return { success: false, error: "Invalid upload payload" };
+				}
+
+				const obj = payload as {
+					name?: unknown;
+					data?: unknown;
+					mimeType?: unknown;
+				};
+				const name = typeof obj.name === "string" ? obj.name : "";
+				const data = coerceToUint8Array(obj.data);
+				const mimeType = typeof obj.mimeType === "string" ? obj.mimeType : undefined;
+				if (!name || !data) {
+					return { success: false, error: "Invalid upload payload" };
+				}
+
+				const result = await appState.processingHelper.uploadDocumentData(
+					name,
+					data,
+					mimeType,
+				);
+				if (!result) {
+					return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+				}
+				return { success: true, data: result };
+			} catch (error: unknown) {
+				console.error("Error uploading document (bytes):", error);
+				const message =
+					error instanceof Error ? error.message : "Unknown error occurred";
+				return { success: false, error: message };
+			}
+		},
+	);
+
+	ipcMain.handle("add-text-memory", async (_, content: string) => {
+		try {
+			if (!appState.processingHelper.getSupermemoryHelper()) {
+				return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			}
+			const result = await appState.processingHelper.addTextMemory(content);
+			if (!result) {
+				return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			}
+			return { success: true, data: result };
+		} catch (error: unknown) {
+			console.error("Error adding text memory:", error);
+			const message =
+				error instanceof Error ? error.message : "Unknown error occurred";
+			return { success: false, error: message };
+		}
+	});
+
+	ipcMain.handle("search-memories", async (_, query: string) => {
+		try {
+			if (!appState.processingHelper.getSupermemoryHelper()) {
+				return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			}
+			const result = await appState.processingHelper.searchMemories(query);
+			if (!result) {
+				return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			}
+			return { success: true, data: result };
+		} catch (error: unknown) {
+			console.error("Error searching memories:", error);
+			const message =
+				error instanceof Error ? error.message : "Unknown error occurred";
+			return { success: false, error: message };
+		}
+	});
+
+	ipcMain.handle("delete-document", async (_, documentId: string) => {
+		try {
+			if (!appState.processingHelper.getSupermemoryHelper()) {
+				return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			}
+			const result = await appState.processingHelper.deleteDocument(documentId);
+			if (!result) {
+				return { success: false, error: "Failed to delete document" };
+			}
+			return { success: true };
+		} catch (error: unknown) {
+			console.error("Error deleting document:", error);
+			const message =
+				error instanceof Error ? error.message : "Unknown error occurred";
+			return { success: false, error: message };
+		}
+	});
+
+	ipcMain.handle("get-documents", async () => {
+		try {
+			const documents = appState.processingHelper.getDocuments();
+			return documents;
+		} catch (error: unknown) {
+			console.error("Error getting documents:", error);
+			return [];
+		}
+	});
+
+	ipcMain.handle("get-user-profile", async () => {
+		try {
+			const profile = await appState.processingHelper.getUserProfile();
+			return profile;
+		} catch (error: unknown) {
+			console.error("Error getting user profile:", error);
+			return null;
+		}
+	});
+
+	ipcMain.handle("reset-customization", async () => {
+		try {
+			appState.processingHelper.resetCustomization();
+			return { success: true };
+		} catch (error: unknown) {
+			console.error("Error resetting customization:", error);
+			const message =
+				error instanceof Error ? error.message : "Unknown error occurred";
+			return { success: false, error: message };
+		}
+	});
+
+	// ==================== About You Handlers ====================
+
+	ipcMain.handle("get-about-you-entries", async () => {
+		try {
+			const entries = appState.processingHelper.getAboutYouEntries();
+			return entries;
+		} catch (error: unknown) {
+			console.error("Error getting About You entries:", error);
+			return [];
+		}
+	});
+
+	ipcMain.handle(
+		"add-about-you-text-entry",
+		async (_, title: string, content: string) => {
+			try {
+				if (!appState.processingHelper.getSupermemoryHelper()) {
+					return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+				}
+				const entry = await appState.processingHelper.addAboutYouTextEntry(
+					title,
+					content,
+				);
+				if (!entry) {
+					return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+				}
+				return { success: true, data: entry };
+			} catch (error: unknown) {
+				console.error("Error adding About You text entry:", error);
+				const message =
+					error instanceof Error ? error.message : "Unknown error occurred";
+				return { success: false, error: message };
+			}
+		},
+	);
+
+	ipcMain.handle(
+		"add-about-you-file-entry-data",
+		async (_, payload: unknown) => {
+			try {
+				if (!appState.processingHelper.getSupermemoryHelper()) {
+					return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+				}
+				if (!payload || typeof payload !== "object") {
+					return { success: false, error: "Invalid upload payload" };
+				}
+
+				const obj = payload as {
+					title?: unknown;
+					name?: unknown;
+					data?: unknown;
+					mimeType?: unknown;
+				};
+				const title = typeof obj.title === "string" ? obj.title : "";
+				const name = typeof obj.name === "string" ? obj.name : "";
+				const data = coerceToUint8Array(obj.data);
+				const mimeType = typeof obj.mimeType === "string" ? obj.mimeType : undefined;
+				if (!title || !name || !data) {
+					return { success: false, error: "Invalid upload payload" };
+				}
+
+				const entry = await appState.processingHelper.addAboutYouFileEntryData(
+					title,
+					name,
+					data,
+					mimeType,
+				);
+				if (!entry) {
+					return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+				}
+				return { success: true, data: entry };
+			} catch (error: unknown) {
+				console.error("Error adding About You file entry (bytes):", error);
+				const message =
+					error instanceof Error ? error.message : "Unknown error occurred";
+				return { success: false, error: message };
+			}
+		},
+	);
+
+	ipcMain.handle(
+		"update-about-you-entry",
+		async (_, id: string, title: string, content: string) => {
+			try {
+				if (!appState.processingHelper.getSupermemoryHelper()) {
+					return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+				}
+				const entry = await appState.processingHelper.updateAboutYouEntry(
+					id,
+					title,
+					content,
+				);
+				if (!entry) {
+					return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+				}
+				return { success: true, data: entry };
+			} catch (error: unknown) {
+				console.error("Error updating About You entry:", error);
+				const message =
+					error instanceof Error ? error.message : "Unknown error occurred";
+				return { success: false, error: message };
+			}
+		},
+	);
+
+	ipcMain.handle("delete-about-you-entry", async (_, id: string) => {
+		try {
+			if (!appState.processingHelper.getSupermemoryHelper()) {
+				return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			}
+			const result = await appState.processingHelper.deleteAboutYouEntry(id);
+			if (!result) {
+				return { success: false, error: "Failed to delete entry" };
+			}
+			return { success: true };
+		} catch (error: unknown) {
+			console.error("Error deleting About You entry:", error);
+			const message =
+				error instanceof Error ? error.message : "Unknown error occurred";
+			return { success: false, error: message };
+		}
+	});
+
+	// Full reset - deletes all Supermemory data
+	ipcMain.handle("full-reset-customization", async () => {
+		try {
+			await appState.processingHelper.fullResetCustomization();
+			return { success: true };
+		} catch (error: unknown) {
+			console.error("Error performing full reset:", error);
 			const message =
 				error instanceof Error ? error.message : "Unknown error occurred";
 			return { success: false, error: message };

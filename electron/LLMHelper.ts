@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 
 interface GroqChatResponse {
 	id: string;
@@ -68,6 +69,23 @@ interface ProblemInfo {
 	difficulty?: string;
 }
 
+interface ExtractedProblemInfo {
+	problem_statement: string;
+	context?: string;
+	suggested_responses?: string[];
+	reasoning?: string;
+}
+
+interface SolutionResponse {
+	solution: {
+		code: string;
+		problem_statement: string;
+		context?: string;
+		suggested_responses?: string[];
+		reasoning?: string;
+	};
+}
+
 type TextModel = "openai/gpt-oss-20b" | "openai/gpt-oss-120b";
 
 export class LLMHelper {
@@ -75,8 +93,13 @@ export class LLMHelper {
 	private textModel: TextModel;
 	private readonly visionModel: string;
 	private readonly apiUrl = "https://api.groq.com/openai/v1/chat/completions";
-	private readonly systemPrompt =
+	private readonly defaultSystemPrompt =
 		`You are Wingman AI, a helpful, proactive assistant for any kind of problem or situation (not just coding). For any user input, analyze the situation, provide a clear problem statement, relevant context, and suggest several possible responses or actions the user could take next. Always explain your reasoning. Present your suggestions as a list of options or next steps.`;
+
+	// Dynamic customization fields
+	private customSystemPrompt = "";
+	private additionalContext = "";
+	private memoryContext = "";
 
 	constructor(apiKey: string, textModel?: TextModel, visionModel?: string) {
 		if (!apiKey) {
@@ -89,6 +112,57 @@ export class LLMHelper {
 		console.log(`[LLMHelper] Initialized with Groq API`);
 		console.log(`[LLMHelper] Text model: ${this.textModel}`);
 		console.log(`[LLMHelper] Vision model: ${this.visionModel}`);
+	}
+
+	// Set custom system prompt (role)
+	public setCustomSystemPrompt(prompt: string): void {
+		this.customSystemPrompt = prompt;
+		console.log(`[LLMHelper] Custom system prompt set (${prompt.length} chars)`);
+	}
+
+	// Set additional context (user text + profile facts)
+	public setAdditionalContext(context: string): void {
+		this.additionalContext = context;
+		console.log(`[LLMHelper] Additional context set (${context.length} chars)`);
+	}
+
+	// Set memory context (from Supermemory search results)
+	public setMemoryContext(context: string): void {
+		this.memoryContext = context;
+		console.log(`[LLMHelper] Memory context set (${context.length} chars)`);
+	}
+
+	// Build the effective system prompt with all customizations
+	private buildSystemPrompt(): string {
+		console.log("[LLMHelper] Building system prompt...");
+		console.log(`[LLMHelper]   - Has custom prompt: ${!!this.customSystemPrompt}`);
+		console.log(`[LLMHelper]   - Has additional context: ${!!this.additionalContext} (${this.additionalContext.length} chars)`);
+		console.log(`[LLMHelper]   - Has memory context: ${!!this.memoryContext} (${this.memoryContext.length} chars)`);
+
+		// Use custom prompt if set, otherwise use default
+		let prompt = this.customSystemPrompt || this.defaultSystemPrompt;
+
+		// Append additional context if available
+		if (this.additionalContext) {
+			prompt += `\n\n--- Additional Context ---\n${this.additionalContext}`;
+		}
+
+		// Append memory context if available
+		if (this.memoryContext) {
+			prompt += `\n\n--- Relevant Information from Memory ---\n${this.memoryContext}`;
+			console.log(`[LLMHelper]   - Memory context preview: "${this.memoryContext.substring(0, 100)}..."`);
+		}
+
+		console.log(`[LLMHelper]   - Total system prompt length: ${prompt.length} chars`);
+		return prompt;
+	}
+
+	// Reset all customizations to defaults
+	public resetCustomization(): void {
+		this.customSystemPrompt = "";
+		this.additionalContext = "";
+		this.memoryContext = "";
+		console.log("[LLMHelper] Customizations reset to defaults");
 	}
 
 	private async callGroq(
@@ -146,6 +220,12 @@ export class LLMHelper {
 			return data.choices[0]?.message?.content || "";
 		} catch (error: unknown) {
 			console.error("[LLMHelper] Error calling Groq:", error);
+
+			// Preserve auth errors - don't wrap them
+			if (error instanceof Error && "isAuthError" in error) {
+				throw error;
+			}
+
 			const message =
 				error instanceof Error ? error.message : "Unknown error occurred";
 			throw new Error(`Failed to call Groq API: ${message}`);
@@ -157,6 +237,27 @@ export class LLMHelper {
 		return imageData.toString("base64");
 	}
 
+	private getImageMimeType(imagePath: string): string {
+		const ext = path.extname(imagePath).toLowerCase();
+		const mimeTypes: Record<string, string> = {
+			".png": "image/png",
+			".jpg": "image/jpeg",
+			".jpeg": "image/jpeg",
+			".gif": "image/gif",
+			".webp": "image/webp",
+			".bmp": "image/bmp",
+			".tiff": "image/tiff",
+			".tif": "image/tiff",
+		};
+		return mimeTypes[ext] || "application/octet-stream";
+	}
+
+	private async imageToDataUrl(imagePath: string): Promise<string> {
+		const base64 = await this.imageToBase64(imagePath);
+		const mimeType = this.getImageMimeType(imagePath);
+		return `data:${mimeType};base64,${base64}`;
+	}
+
 	private cleanJsonResponse(text: string): string {
 		// Remove markdown code block syntax if present
 		text = text.replace(/^```(?:json)?\n/, "").replace(/\n```$/, "");
@@ -165,16 +266,33 @@ export class LLMHelper {
 		return text;
 	}
 
+	private parseJsonResponse<T>(text: string): T {
+		const cleaned = this.cleanJsonResponse(text);
+		try {
+			return JSON.parse(cleaned) as T;
+		} catch (_error) {
+			// Fallback: attempt to extract the first JSON object from a noisy response.
+			const first = cleaned.indexOf("{");
+			const last = cleaned.lastIndexOf("}");
+			if (first !== -1 && last !== -1 && last > first) {
+				const candidate = cleaned.slice(first, last + 1);
+				return JSON.parse(candidate) as T;
+			}
+			throw _error;
+		}
+	}
+
 	public async extractProblemFromImages(
 		imagePaths: string[],
 		signal?: AbortSignal,
-	) {
+	): Promise<ExtractedProblemInfo> {
 		try {
 			// Build content array with text and images
+			const systemPrompt = this.buildSystemPrompt();
 			const content: MessageContent[] = [
 				{
 					type: "text",
-					text: `${this.systemPrompt}\n\nYou are a wingman. Please analyze these images and extract the following information in JSON format:\n{
+					text: `${systemPrompt}\n\nYou are a wingman. Please analyze these images and extract the following information in JSON format:\n{
   "problem_statement": "A clear statement of the problem or situation depicted in the images.",
   "context": "Relevant background or context from the images.",
   "suggested_responses": ["First possible answer or action", "Second possible answer or action", "..."],
@@ -186,31 +304,45 @@ export class LLMHelper {
 			// Add images (max 5 per Groq limits)
 			const imagesToProcess = imagePaths.slice(0, 5);
 			for (const imagePath of imagesToProcess) {
-				const base64Image = await this.imageToBase64(imagePath);
+				const dataUrl = await this.imageToDataUrl(imagePath);
 				content.push({
 					type: "image_url",
 					image_url: {
-						url: `data:image/png;base64,${base64Image}`,
+						url: dataUrl,
 					},
 				});
 			}
 
-			const response = await this.callGroq(
-				this.visionModel,
-				[{ role: "user", content }],
-				{ temperature: 1, responseFormat: { type: "json_object" }, signal },
-			);
-
-			const text = this.cleanJsonResponse(response);
+			let response: string;
 			try {
-				const parsed = JSON.parse(text);
+				// Prefer JSON mode when available; fall back for models/endpoints that don't support it.
+				response = await this.callGroq(
+					this.visionModel,
+					[{ role: "user", content }],
+					{ temperature: 1, responseFormat: { type: "json_object" }, signal },
+				);
+			} catch (e: unknown) {
+				const message = e instanceof Error ? e.message : String(e);
+				if (message.includes("response_format") || message.includes("json_object")) {
+					response = await this.callGroq(
+						this.visionModel,
+						[{ role: "user", content }],
+						{ temperature: 1, signal },
+					);
+				} else {
+					throw e;
+				}
+			}
+
+			try {
+				const parsed = this.parseJsonResponse<ExtractedProblemInfo>(response);
 				return parsed;
 			} catch (e: unknown) {
 				console.error(
 					"[LLMHelper] JSON parse error:",
 					e,
 					"Raw response:",
-					text,
+					response,
 				);
 				const message = e instanceof Error ? e.message : "Unknown parse error";
 				throw new Error(`Failed to parse Groq response as JSON: ${message}`);
@@ -224,8 +356,9 @@ export class LLMHelper {
 	public async generateSolution(
 		problemInfo: ProblemInfo,
 		signal?: AbortSignal,
-	) {
-		const prompt = `${this.systemPrompt}\n\nGiven this problem or situation:\n${JSON.stringify(problemInfo, null, 2)}\n\nPlease provide your response in the following JSON format:\n{
+	): Promise<SolutionResponse> {
+		const systemPrompt = this.buildSystemPrompt();
+		const prompt = `${systemPrompt}\n\nGiven this problem or situation:\n${JSON.stringify(problemInfo, null, 2)}\n\nPlease provide your response in the following JSON format:\n{
   "solution": {
     "code": "The code or main answer here.",
     "problem_statement": "Restate the problem or situation.",
@@ -237,15 +370,29 @@ export class LLMHelper {
 
 		console.log("[LLMHelper] Calling Groq for solution...");
 		try {
-			const response = await this.callGroq(
-				this.textModel,
-				[{ role: "user", content: prompt }],
-				{ temperature: 0.7, signal },
-			);
-			console.log("[LLMHelper] Groq returned result.");
-			const text = this.cleanJsonResponse(response);
+			let response: string;
 			try {
-				const parsed = JSON.parse(text);
+				// Prefer JSON mode when available; fall back for models/endpoints that don't support it.
+				response = await this.callGroq(
+					this.textModel,
+					[{ role: "user", content: prompt }],
+					{ temperature: 0.7, responseFormat: { type: "json_object" }, signal },
+				);
+			} catch (e: unknown) {
+				const message = e instanceof Error ? e.message : String(e);
+				if (message.includes("response_format") || message.includes("json_object")) {
+					response = await this.callGroq(
+						this.textModel,
+						[{ role: "user", content: prompt }],
+						{ temperature: 0.7, signal },
+					);
+				} else {
+					throw e;
+				}
+			}
+			console.log("[LLMHelper] Groq returned result.");
+			try {
+				const parsed = this.parseJsonResponse<SolutionResponse>(response);
 				console.log("[LLMHelper] Parsed response:", parsed);
 				return parsed;
 			} catch (e: unknown) {
@@ -253,7 +400,7 @@ export class LLMHelper {
 					"[LLMHelper] JSON parse error:",
 					e,
 					"Raw response:",
-					text,
+					response,
 				);
 				const message = e instanceof Error ? e.message : "Unknown parse error";
 				throw new Error(`Failed to parse Groq response as JSON: ${message}`);
@@ -269,13 +416,14 @@ export class LLMHelper {
 		currentCode: string,
 		debugImagePaths: string[],
 		signal?: AbortSignal,
-	) {
+	): Promise<SolutionResponse> {
 		try {
 			// Build content array with text and images
+			const systemPrompt = this.buildSystemPrompt();
 			const content: MessageContent[] = [
 				{
 					type: "text",
-					text: `${this.systemPrompt}\n\nYou are a wingman. Given:\n1. The original problem or situation: ${JSON.stringify(problemInfo, null, 2)}\n2. The current response or approach: ${currentCode}\n3. The debug information in the provided images\n\nPlease analyze the debug information and provide feedback in this JSON format:\n{
+					text: `${systemPrompt}\n\nYou are a wingman. Given:\n1. The original problem or situation: ${JSON.stringify(problemInfo, null, 2)}\n2. The current response or approach: ${currentCode}\n3. The debug information in the provided images\n\nPlease analyze the debug information and provide feedback in this JSON format:\n{
   "solution": {
     "code": "The code or main answer here.",
     "problem_statement": "Restate the problem or situation.",
@@ -290,24 +438,38 @@ export class LLMHelper {
 			// Add images (max 5 per Groq limits)
 			const imagesToProcess = debugImagePaths.slice(0, 5);
 			for (const imagePath of imagesToProcess) {
-				const base64Image = await this.imageToBase64(imagePath);
+				const dataUrl = await this.imageToDataUrl(imagePath);
 				content.push({
 					type: "image_url",
 					image_url: {
-						url: `data:image/png;base64,${base64Image}`,
+						url: dataUrl,
 					},
 				});
 			}
 
-			const response = await this.callGroq(
-				this.visionModel,
-				[{ role: "user", content }],
-				{ temperature: 1, responseFormat: { type: "json_object" }, signal },
-			);
-
-			const text = this.cleanJsonResponse(response);
+			let response: string;
 			try {
-				const parsed = JSON.parse(text);
+				// Prefer JSON mode when available; fall back for models/endpoints that don't support it.
+				response = await this.callGroq(
+					this.visionModel,
+					[{ role: "user", content }],
+					{ temperature: 1, responseFormat: { type: "json_object" }, signal },
+				);
+			} catch (e: unknown) {
+				const message = e instanceof Error ? e.message : String(e);
+				if (message.includes("response_format") || message.includes("json_object")) {
+					response = await this.callGroq(
+						this.visionModel,
+						[{ role: "user", content }],
+						{ temperature: 1, signal },
+					);
+				} else {
+					throw e;
+				}
+			}
+
+			try {
+				const parsed = this.parseJsonResponse<SolutionResponse>(response);
 				console.log("[LLMHelper] Parsed debug response:", parsed);
 				return parsed;
 			} catch (e: unknown) {
@@ -315,7 +477,7 @@ export class LLMHelper {
 					"[LLMHelper] JSON parse error:",
 					e,
 					"Raw response:",
-					text,
+					response,
 				);
 				const message = e instanceof Error ? e.message : "Unknown parse error";
 				throw new Error(`Failed to parse Groq response as JSON: ${message}`);
@@ -328,17 +490,18 @@ export class LLMHelper {
 
 	public async analyzeImageFile(imagePath: string, signal?: AbortSignal) {
 		try {
-			const base64Image = await this.imageToBase64(imagePath);
+			const dataUrl = await this.imageToDataUrl(imagePath);
+			const systemPrompt = this.buildSystemPrompt();
 
 			const content: MessageContent[] = [
 				{
 					type: "text",
-					text: `${this.systemPrompt}\n\nDescribe the content of this image in a short, concise answer. In addition to your main answer, suggest several possible actions or responses the user could take next based on the image. Do not return a structured JSON object, just answer naturally as you would to a user. Be concise and brief.`,
+					text: `${systemPrompt}\n\nDescribe the content of this image in a short, concise answer. In addition to your main answer, suggest several possible actions or responses the user could take next based on the image. Do not return a structured JSON object, just answer naturally as you would to a user. Be concise and brief.`,
 				},
 				{
 					type: "image_url",
 					image_url: {
-						url: `data:image/png;base64,${base64Image}`,
+						url: dataUrl,
 					},
 				},
 			];
@@ -356,13 +519,30 @@ export class LLMHelper {
 		}
 	}
 
-	public async chat(message: string): Promise<string> {
+	public async chat(
+		message: string,
+		history?: Array<{ role: "user" | "assistant"; content: string }>,
+		signal?: AbortSignal,
+	): Promise<string> {
 		try {
-			const response = await this.callGroq(
-				this.textModel,
-				[{ role: "user", content: message }],
-				{ temperature: 0.7 },
-			);
+			const systemPrompt = this.buildSystemPrompt();
+
+			const messages: Array<{ role: string; content: string }> = [
+				{ role: "system", content: systemPrompt },
+			];
+			if (history && history.length > 0) {
+				for (const m of history) {
+					if (m?.content) {
+						messages.push({ role: m.role, content: m.content });
+					}
+				}
+			}
+			messages.push({ role: "user", content: message });
+
+			const response = await this.callGroq(this.textModel, messages, {
+				temperature: 0.7,
+				signal,
+			});
 			return response;
 		} catch (error) {
 			console.error("[LLMHelper] Error in chat:", error);

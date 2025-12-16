@@ -6,7 +6,9 @@
 	"scripts": {
 		"clean": "rimraf dist dist-electron",
 		"dev": "vite",
-		"build": "npm run clean && tsc && vite build",
+		"build:renderer": "tsc && vite build",
+		"build:electron": "tsc -p electron/tsconfig.json",
+		"build": "npm run clean && npm run build:renderer && npm run build:electron",
 		"preview": "vite preview",
 		"postinstall": "cross-env SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm rebuild sharp",
 		"electron:dev": "tsc -p electron/tsconfig.json && cross-env NODE_ENV=development electron .",

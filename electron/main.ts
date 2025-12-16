@@ -193,6 +193,9 @@ export class AppState {
 		// Clear stored solution code
 		this.clearCurrentSolutionCode();
 
+		// Clear chat/session context
+		this.processingHelper.resetConversation();
+
 		// Reset view to initial state
 		this.setView("queue");
 	}
@@ -256,7 +259,7 @@ export class AppState {
 
 		const contextMenu = Menu.buildFromTemplate([
 			{
-				label: "Show Interview Coder",
+				label: "Show Clueless",
 				click: () => {
 					this.centerAndShowWindow();
 				},
@@ -300,12 +303,12 @@ export class AppState {
 			},
 		]);
 
-		this.tray.setToolTip("Interview Coder - Press Cmd+Shift+Space to show");
+		this.tray.setToolTip("Clueless - Press Cmd+Shift+Space to show");
 		this.tray.setContextMenu(contextMenu);
 
 		// Set a title for macOS (will appear in menu bar)
 		if (process.platform === "darwin") {
-			this.tray.setTitle("IC");
+			this.tray.setTitle("CL");
 		}
 
 		// Double-click to show window

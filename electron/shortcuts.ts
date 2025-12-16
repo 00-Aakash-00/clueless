@@ -82,7 +82,7 @@ export class ShortcutsHelper {
 			this.appState.toggleMainWindow();
 			// If window exists and we're showing it, bring it to front
 			const mainWindow = this.appState.getMainWindow();
-			if (mainWindow && !this.appState.isVisible()) {
+			if (mainWindow && this.appState.isVisible()) {
 				// Force the window to the front on macOS
 				if (process.platform === "darwin") {
 					mainWindow.setAlwaysOnTop(true, "normal");

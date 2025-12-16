@@ -1,1 +1,212 @@
 /// <reference types="vite/client" />
+
+// Global type definitions for IPC event data
+declare global {
+	interface DebugSuccessData {
+		solution: {
+			old_code: string;
+			new_code: string;
+			thoughts: string[];
+			time_complexity: string;
+			space_complexity: string;
+		};
+	}
+
+	interface ProblemExtractedData {
+		problem_statement: string;
+		context?: string;
+		suggested_responses?: string[];
+		reasoning?: string;
+		input_format?: {
+			description: string;
+			parameters: unknown[];
+		};
+		output_format?: {
+			description: string;
+			type: string;
+			subtype: string;
+		};
+		complexity?: { time: string; space: string };
+		test_cases?: unknown[];
+		validation_type?: string;
+		difficulty?: string;
+	}
+
+	interface SolutionSuccessData {
+		solution: {
+			code: string;
+			problem_statement: string;
+			context?: string;
+			suggested_responses?: string[];
+			reasoning?: string;
+		};
+	}
+
+	// Customization types
+	interface StoredDocument {
+		id: string;
+		name: string;
+		type: string;
+		addedAt: number;
+	}
+
+	// About You entry - persisted locally
+	interface AboutYouEntry {
+		id: string;
+		title: string;
+		content: string;
+		type: "text" | "file";
+		filePath?: string;
+		fileName?: string;
+		supermemoryId?: string;
+		addedAt: number;
+	}
+
+	interface CustomizeConfig {
+		role: string;
+		customRoleText: string;
+		textContext: string;
+		documents: StoredDocument[];
+		userFacts: string[];
+		aboutYou: AboutYouEntry[];
+	}
+
+	interface ElectronAPI {
+		updateContentDimensions: (dimensions: {
+			width: number;
+			height: number;
+		}) => Promise<void>;
+		getScreenshots: () => Promise<Array<{ path: string; preview: string }>>;
+		deleteScreenshot: (
+			path: string,
+		) => Promise<{ success: boolean; error?: string }>;
+		onScreenshotTaken: (
+			callback: (data: { path: string; preview: string }) => void,
+		) => () => void;
+		onResetView: (callback: () => void) => () => void;
+		onSolutionStart: (callback: () => void) => () => void;
+		onDebugStart: (callback: () => void) => () => void;
+		onDebugSuccess: (callback: (data: DebugSuccessData) => void) => () => void;
+		onSolutionError: (callback: (error: string) => void) => () => void;
+		onProcessingNoScreenshots: (callback: () => void) => () => void;
+		onProblemExtracted: (
+			callback: (data: ProblemExtractedData) => void,
+		) => () => void;
+		onSolutionSuccess: (
+			callback: (data: SolutionSuccessData) => void,
+		) => () => void;
+		onUnauthorized: (callback: () => void) => () => void;
+		onDebugError: (callback: (error: string) => void) => () => void;
+		onFocusChat: (callback: () => void) => () => void;
+		takeScreenshot: () => Promise<{ path: string; preview: string }>;
+		moveWindowLeft: () => Promise<void>;
+		moveWindowRight: () => Promise<void>;
+		moveWindowUp: () => Promise<void>;
+		moveWindowDown: () => Promise<void>;
+		analyzeImageFile: (
+			path: string,
+		) => Promise<{ text: string; timestamp: number }>;
+		groqChat: (message: string) => Promise<string>;
+		quitApp: () => Promise<void>;
+
+		// LLM Model Management
+		getCurrentLlmConfig: () => Promise<{
+			provider: string;
+			model: string;
+			visionModel: string;
+			availableModels: string[];
+		}>;
+		getAvailableModels: () => Promise<string[]>;
+		switchModel: (model: string) => Promise<{ success: boolean; error?: string }>;
+		testLlmConnection: () => Promise<{ success: boolean; error?: string }>;
+
+		// Customization APIs
+		getCustomizeConfig: () => Promise<CustomizeConfig | null>;
+		getRolePresets: () => Promise<Record<string, string>>;
+		setRole: (
+			role: string,
+			customText?: string,
+		) => Promise<{ success: boolean; error?: string }>;
+		setTextContext: (
+			text: string,
+		) => Promise<{ success: boolean; error?: string }>;
+		setUserFacts: (
+			facts: string[],
+		) => Promise<{ success: boolean; error?: string }>;
+		uploadDocumentData: (payload: {
+			name: string;
+			data: Uint8Array;
+			mimeType?: string;
+		}) => Promise<{
+			success: boolean;
+			data?: { id: string; status: string };
+			error?: string;
+		}>;
+		addTextMemory: (
+			content: string,
+		) => Promise<{
+			success: boolean;
+			data?: { id: string; status: string };
+			error?: string;
+		}>;
+		searchMemories: (
+			query: string,
+		) => Promise<{
+			success: boolean;
+			data?: { results: unknown[]; total: number };
+			error?: string;
+		}>;
+		deleteDocument: (
+			documentId: string,
+		) => Promise<{ success: boolean; error?: string }>;
+		getDocuments: () => Promise<StoredDocument[]>;
+		getUserProfile: () => Promise<{
+			static: string[];
+			dynamic: string[];
+		} | null>;
+		resetCustomization: () => Promise<{ success: boolean; error?: string }>;
+
+		// About You APIs
+		getAboutYouEntries: () => Promise<AboutYouEntry[]>;
+		addAboutYouTextEntry: (
+			title: string,
+			content: string,
+		) => Promise<{
+			success: boolean;
+			data?: AboutYouEntry;
+			error?: string;
+		}>;
+		addAboutYouFileEntryData: (payload: {
+			title: string;
+			name: string;
+			data: Uint8Array;
+			mimeType?: string;
+		}) => Promise<{
+			success: boolean;
+			data?: AboutYouEntry;
+			error?: string;
+		}>;
+		updateAboutYouEntry: (
+			id: string,
+			title: string,
+			content: string,
+		) => Promise<{
+			success: boolean;
+			data?: AboutYouEntry;
+			error?: string;
+		}>;
+		deleteAboutYouEntry: (
+			id: string,
+		) => Promise<{ success: boolean; error?: string }>;
+
+		// Full reset (deletes all Supermemory data)
+		fullResetCustomization: () => Promise<{ success: boolean; error?: string }>;
+	}
+
+	interface Window {
+		electronAPI: ElectronAPI;
+	}
+}
+
+// This export makes this file a module, required for declare global
+export {};

@@ -23,14 +23,6 @@ type DiffLine = {
 	removed?: boolean;
 };
 
-const _syntaxHighlighterStyles = {
-	".syntax-line": {
-		whiteSpace: "pre-wrap",
-		wordBreak: "break-word",
-		overflowWrap: "break-word",
-	},
-} as const;
-
 const CodeComparisonSection = ({
 	oldCode,
 	newCode,
@@ -40,64 +32,51 @@ const CodeComparisonSection = ({
 	newCode: string | null;
 	isLoading: boolean;
 }) => {
-	const computeDiff = () => {
-		if (!oldCode || !newCode) return { leftLines: [], rightLines: [] };
+		const computeDiff = () => {
+			if (!oldCode || !newCode) return { leftLines: [], rightLines: [] };
 
-		// Normalize line endings and clean up the code
-		const normalizeCode = (code: string) => {
-			return code
-				.replace(/\r\n/g, "\n") // Convert Windows line endings to Unix
-				.replace(/\r/g, "\n") // Convert remaining carriage returns
-				.trim(); // Remove leading/trailing whitespace
-		};
+			// Normalize line endings and clean up the code
+			const normalizeCode = (code: string) => {
+				return code
+					.replace(/\r\n/g, "\n") // Convert Windows line endings to Unix
+					.replace(/\r/g, "\n"); // Convert remaining carriage returns
+			};
 
 		const normalizedOldCode = normalizeCode(oldCode);
 		const normalizedNewCode = normalizeCode(newCode);
 
-		// Generate the diff
-		const diff = diffLines(normalizedOldCode, normalizedNewCode, {
-			newlineIsToken: true,
-			ignoreWhitespace: true, // Changed to true to better handle whitespace differences
-		});
+			// Generate the diff
+			const diff = diffLines(normalizedOldCode, normalizedNewCode, {
+				ignoreWhitespace: true, // Changed to true to better handle whitespace differences
+			});
 
-		// Process the diff to create parallel arrays
-		const leftLines: DiffLine[] = [];
-		const rightLines: DiffLine[] = [];
+			// Process the diff to create parallel arrays
+			const leftLines: DiffLine[] = [];
+			const rightLines: DiffLine[] = [];
 
-		diff.forEach((part) => {
-			if (part.added) {
-				// Add empty lines to left side
-				leftLines.push(...Array(part.count || 0).fill({ value: "" }));
-				// Add new lines to right side, filter out empty lines at the end
-				rightLines.push(
-					...part.value
-						.split("\n")
-						.filter((line) => line.length > 0)
-						.map((line) => ({
-							value: line,
-							added: true,
-						})),
-				);
-			} else if (part.removed) {
-				// Add removed lines to left side, filter out empty lines at the end
-				leftLines.push(
-					...part.value
-						.split("\n")
-						.filter((line) => line.length > 0)
-						.map((line) => ({
+			diff.forEach((part) => {
+				const lines = part.value.split("\n");
+				// Drop trailing empty element caused by a trailing newline in the diff chunk.
+				if (lines.length > 0 && lines[lines.length - 1] === "") {
+					lines.pop();
+				}
+
+				if (part.added) {
+					leftLines.push(...lines.map(() => ({ value: "" })));
+					rightLines.push(...lines.map((line) => ({ value: line, added: true })));
+				} else if (part.removed) {
+					leftLines.push(
+						...lines.map((line) => ({
 							value: line,
 							removed: true,
 						})),
-				);
-				// Add empty lines to right side
-				rightLines.push(...Array(part.count || 0).fill({ value: "" }));
-			} else {
-				// Add unchanged lines to both sides
-				const lines = part.value.split("\n").filter((line) => line.length > 0);
-				leftLines.push(...lines.map((line) => ({ value: line })));
-				rightLines.push(...lines.map((line) => ({ value: line })));
-			}
-		});
+					);
+					rightLines.push(...lines.map(() => ({ value: "" })));
+				} else {
+					leftLines.push(...lines.map((line) => ({ value: line })));
+					rightLines.push(...lines.map((line) => ({ value: line })));
+				}
+			});
 
 		return { leftLines, rightLines };
 	};
@@ -266,31 +245,50 @@ const Debug: React.FC<DebugProps> = ({ isProcessing, setIsProcessing }) => {
 	};
 
 	useEffect(() => {
-		// Try to get the new solution data from cache first
-		const newSolution = queryClient.getQueryData(["new_solution"]) as {
-			old_code: string;
-			new_code: string;
-			thoughts: string[];
-			time_complexity: string;
-			space_complexity: string;
-		} | null;
+		const applyNewSolutionFromCache = () => {
+			const newSolution = queryClient.getQueryData(["new_solution"]) as {
+				old_code: string;
+				new_code: string;
+				thoughts: string[];
+				time_complexity: string;
+				space_complexity: string;
+			} | null;
 
-		// If we have cached data, set all state variables to the cached data
-		if (newSolution) {
+			if (!newSolution) return;
+
 			setOldCode(newSolution.old_code || null);
 			setNewCode(newSolution.new_code || null);
 			setThoughtsData(newSolution.thoughts || null);
 			setTimeComplexityData(newSolution.time_complexity || null);
 			setSpaceComplexityData(newSolution.space_complexity || null);
 			setIsProcessing(false);
-		}
+		};
+
+		applyNewSolutionFromCache();
+
+		const unsubscribeQueryCache = queryClient.getQueryCache().subscribe(
+			(event) => {
+				if (event?.query.queryKey[0] === "new_solution") {
+					applyNewSolutionFromCache();
+				}
+			},
+		);
 
 		// Set up event listeners
 		const cleanupFunctions = [
 			window.electronAPI.onScreenshotTaken(() => refetch()),
 			window.electronAPI.onResetView(() => refetch()),
+			window.electronAPI.onProcessingNoScreenshots(() => {
+				showToast(
+					"No Screenshots",
+					"There are no extra screenshots to process.",
+					"neutral",
+				);
+				setIsProcessing(false);
+			}),
 			window.electronAPI.onDebugSuccess(() => {
 				setIsProcessing(false); //all the other stuff ahapepns in the parent component, so we just need to do this.
+				applyNewSolutionFromCache();
 			}),
 			window.electronAPI.onDebugStart(() => {
 				setIsProcessing(true);
@@ -325,6 +323,7 @@ const Debug: React.FC<DebugProps> = ({ isProcessing, setIsProcessing }) => {
 		updateDimensions();
 
 		return () => {
+			unsubscribeQueryCache();
 			resizeObserver.disconnect();
 			for (const cleanup of cleanupFunctions) {
 				cleanup();

@@ -17,7 +17,7 @@ import {
 import type { ProblemStatementData } from "../types/solutions";
 import Debug from "./Debug";
 
-// (Using global ElectronAPI type from src/types/electron.d.ts)
+// (Using global ElectronAPI type from src/vite-env.d.ts)
 
 export const ContentSection = ({
 	title,
@@ -123,7 +123,7 @@ export const ComplexitySection = ({
 
 interface SolutionsProps {
 	setView: React.Dispatch<
-		React.SetStateAction<"queue" | "solutions" | "debug">
+		React.SetStateAction<"queue" | "solutions">
 	>;
 }
 const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
@@ -141,7 +141,6 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 	const [spaceComplexityData, setSpaceComplexityData] = useState<string | null>(
 		null,
 	);
-	const [_customContent, setCustomContent] = useState<string | null>(null);
 
 	const [toastOpen, setToastOpen] = useState(false);
 	const [toastMessage, setToastMessage] = useState<ToastMessage>({
@@ -239,19 +238,18 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 			}),
 			window.electronAPI.onSolutionStart(async () => {
 				// Reset UI state for a new solution
-				setSolutionData(null);
-				setThoughtsData(null);
-				setTimeComplexityData(null);
-				setSpaceComplexityData(null);
-				setCustomContent(null);
-			}),
-			//if there was an error processing the initial solution
-			window.electronAPI.onSolutionError((error: string) => {
-				showToast(
-					"Processing Failed",
-					"There was an error processing your extra screenshots.",
-					"error",
-				);
+					setSolutionData(null);
+					setThoughtsData(null);
+					setTimeComplexityData(null);
+					setSpaceComplexityData(null);
+				}),
+				//if there was an error processing the initial solution
+				window.electronAPI.onSolutionError((error: string) => {
+					showToast(
+						"Processing Failed",
+						"There was an error processing your screenshots.",
+						"error",
+					);
 				// Reset solutions in the cache (even though this shouldn't ever happen) and complexities to previous states
 				const solution = queryClient.getQueryData(["solution"]) as {
 					code: string;
@@ -259,9 +257,10 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 					time_complexity: string;
 					space_complexity: string;
 				} | null;
-				if (!solution) {
-					setView("queue"); //make sure that this is correct. or like make sure there's a toast or something
-				}
+					if (!solution) {
+						// If there's nothing in cache to restore, go back to queue.
+						setView("queue");
+					}
 				setSolutionData(solution?.code || null);
 				setThoughtsData(solution?.thoughts || null);
 				setTimeComplexityData(solution?.time_complexity || null);
@@ -299,16 +298,16 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 				//we'll set the debug processing state to true and use that to render a little loader
 				setDebugProcessing(true);
 			}),
-			//the first time debugging works, we'll set the view to debug and populate the cache with the data
-			window.electronAPI.onDebugSuccess((data) => {
-				queryClient.setQueryData(["new_solution"], data.solution);
-				setDebugProcessing(false);
-			}),
-			//when there was an error in the initial debugging, we'll show a toast and stop the little generating pulsing thing.
-			window.electronAPI.onDebugError(() => {
-				showToast(
-					"Processing Failed",
-					"There was an error debugging your code.",
+				// Populate the debug cache (used to render the Debug view inline).
+				window.electronAPI.onDebugSuccess((data) => {
+					queryClient.setQueryData(["new_solution"], data.solution);
+					setDebugProcessing(false);
+				}),
+				// Debug error: show toast and stop loading.
+				window.electronAPI.onDebugError(() => {
+					showToast(
+						"Processing Failed",
+						"There was an error debugging your code.",
 					"error",
 				);
 				setDebugProcessing(false);
@@ -339,9 +338,20 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 
 	useEffect(() => {
 		setProblemStatementData(
-			queryClient.getQueryData(["problem_statement"]) || null,
+			(queryClient.getQueryData(["problem_statement"]) as ProblemStatementData | undefined) ||
+				null,
 		);
-		setSolutionData(queryClient.getQueryData(["solution"]) || null);
+
+		const solution = queryClient.getQueryData(["solution"]) as {
+			code: string;
+			thoughts: string[];
+			time_complexity: string;
+			space_complexity: string;
+		} | null;
+		setSolutionData(solution?.code ?? null);
+		setThoughtsData(solution?.thoughts ?? null);
+		setTimeComplexityData(solution?.time_complexity ?? null);
+		setSpaceComplexityData(solution?.space_complexity ?? null);
 
 		const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
 			if (event?.query.queryKey[0] === "problem_statement") {
