@@ -1,37 +1,21 @@
 import type React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+	IoAdd,
 	IoChevronDown,
 	IoChevronForward,
 	IoClose,
 	IoCloudUpload,
 	IoCreate,
-	IoDocument,
 	IoDocumentText,
+	IoLink,
 	IoPersonCircle,
 	IoRefresh,
+	IoSettings,
+	IoSync,
 	IoTrash,
 	IoWarning,
-	IoAdd,
 } from "react-icons/io5";
-
-interface StoredDocument {
-	id: string;
-	name: string;
-	type: string;
-	addedAt: number;
-}
-
-interface AboutYouEntry {
-	id: string;
-	title: string;
-	content: string;
-	type: "text" | "file";
-	filePath?: string;
-	fileName?: string;
-	supermemoryId?: string;
-	addedAt: number;
-}
 
 interface CustomizePanelProps {
 	onClose?: () => void;
@@ -46,44 +30,60 @@ const ROLE_LABELS: Record<string, string> = {
 	custom: "Custom Role...",
 };
 
-// Collapsible Section Component
-interface SectionProps {
+type TabKey = "knowledge" | "integrations" | "personal";
+
+const PROVIDERS: Array<{
+	id: SupermemoryProvider;
+	label: string;
+	description: string;
+}> = [
+	{
+		id: "notion",
+		label: "Notion",
+		description: "Sync pages and databases into your knowledge base.",
+	},
+	{
+		id: "google-drive",
+		label: "Google Drive",
+		description: "Import Docs, Sheets, Slides, PDFs, and more.",
+	},
+	{
+		id: "onedrive",
+		label: "OneDrive",
+		description: "Sync files from OneDrive and Microsoft 365.",
+	},
+];
+
+const Section: React.FC<{
 	title: string;
 	icon: React.ReactNode;
 	children: React.ReactNode;
 	defaultOpen?: boolean;
 	badge?: number;
-}
-
-const Section: React.FC<SectionProps> = ({
-	title,
-	icon,
-	children,
-	defaultOpen = false,
-	badge,
-}) => {
+}> = ({ title, icon, children, defaultOpen = false, badge }) => {
 	const [isOpen, setIsOpen] = useState(defaultOpen);
-
 	return (
 		<div className="border-b border-white/10 last:border-b-0">
 			<button
 				type="button"
-				onClick={() => setIsOpen(!isOpen)}
+				onClick={() => setIsOpen((v) => !v)}
 				className="w-full flex items-center justify-between py-3 px-1 text-left hover:bg-white/5 transition-colors rounded-lg"
 			>
-				<div className="flex items-center gap-2">
+				<div className="flex items-center gap-2 min-w-0">
 					<span className="text-white/60">{icon}</span>
-					<span className="text-xs font-medium text-white/80">{title}</span>
+					<span className="text-xs font-medium text-white/80 truncate">
+						{title}
+					</span>
 					{badge !== undefined && badge > 0 && (
-						<span className="text-[10px] bg-white/20 text-white/70 px-1.5 py-0.5 rounded-full">
+						<span className="text-[10px] bg-white/20 text-white/70 px-1.5 py-0.5 rounded-full flex-shrink-0">
 							{badge}
 						</span>
 					)}
 				</div>
 				{isOpen ? (
-					<IoChevronDown className="w-4 h-4 text-white/50" />
+					<IoChevronDown className="w-4 h-4 text-white/50 flex-shrink-0" />
 				) : (
-					<IoChevronForward className="w-4 h-4 text-white/50" />
+					<IoChevronForward className="w-4 h-4 text-white/50 flex-shrink-0" />
 				)}
 			</button>
 			{isOpen && <div className="pb-3 px-1">{children}</div>}
@@ -91,16 +91,14 @@ const Section: React.FC<SectionProps> = ({
 	);
 };
 
-interface FileDropZoneProps {
+const FileDropZone: React.FC<{
 	accept: string;
 	multiple?: boolean;
 	disabled?: boolean;
 	helperText: string;
 	buttonLabel?: string;
 	onFilesSelected: (files: FileList | null) => void;
-}
-
-const FileDropZone: React.FC<FileDropZoneProps> = ({
+}> = ({
 	accept,
 	multiple = false,
 	disabled = false,
@@ -134,7 +132,6 @@ const FileDropZone: React.FC<FileDropZoneProps> = ({
 
 	const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 		onFilesSelected(e.target.files);
-		// Allow selecting the same file again.
 		e.currentTarget.value = "";
 	};
 
@@ -170,46 +167,31 @@ const FileDropZone: React.FC<FileDropZoneProps> = ({
 	);
 };
 
+const formatDocTitle = (doc: ListedDocument): string => {
+	const title = typeof doc.title === "string" ? doc.title.trim() : "";
+	if (title) return title;
+	const metadata = (doc.metadata ?? {}) as Record<string, unknown>;
+	const filename = typeof metadata.filename === "string" ? metadata.filename : "";
+	if (filename) return filename;
+	return doc.id;
+};
+
+const formatDocSubtitle = (doc: ListedDocument): string => {
+	const status = typeof doc.status === "string" ? doc.status : "";
+	const type = typeof doc.type === "string" ? doc.type : "";
+	const parts = [type, status].filter(Boolean);
+	return parts.join(" • ");
+};
+
 const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
-	// State for role selection
-	const [selectedRole, setSelectedRole] = useState("default");
-	const [customRoleText, setCustomRoleText] = useState("");
+	const [activeTab, setActiveTab] = useState<TabKey>("knowledge");
 
-	// State for text context
-	const [textContext, setTextContext] = useState("");
-
-	// State for documents
-	const [documents, setDocuments] = useState<StoredDocument[]>([]);
-	const [isUploading, setIsUploading] = useState(false);
-
-	// State for user facts
-	const [userFacts, setUserFacts] = useState("");
-
-	// State for About You
-	const [aboutYouEntries, setAboutYouEntries] = useState<AboutYouEntry[]>([]);
-	const [isAddingEntry, setIsAddingEntry] = useState(false);
-	const [addEntryType, setAddEntryType] = useState<"text" | "file">("text");
-	const [newEntryTitle, setNewEntryTitle] = useState("");
-	const [newEntryContent, setNewEntryContent] = useState("");
-	const [editingEntry, setEditingEntry] = useState<AboutYouEntry | null>(null);
-	const [editTitle, setEditTitle] = useState("");
-	const [editContent, setEditContent] = useState("");
-	const [isAboutYouUploading, setIsAboutYouUploading] = useState(false);
-
-	// State for reset confirmation
-	const [showResetConfirm, setShowResetConfirm] = useState(false);
-	const [isResetting, setIsResetting] = useState(false);
-
-	// Personalization availability (requires Supermemory API key)
-	const [personalizationAvailable, setPersonalizationAvailable] = useState(true);
-
-	// State for feedback
+	const [supermemoryAvailable, setSupermemoryAvailable] = useState(true);
 	const [saveStatus, setSaveStatus] = useState<{
 		type: "success" | "error" | null;
 		message: string;
 	}>({ type: null, message: "" });
 
-	// State for upload tracking (session-wide)
 	const [uploadStats, setUploadStats] = useState<{
 		uploadedThisSession: number;
 		currentUploadName: string;
@@ -217,41 +199,51 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 		uploadedThisSession: 0,
 		currentUploadName: "",
 	});
-	const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25MB
+	const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 	const PERSONALIZATION_DISABLED_MESSAGE =
 		"Personalization is disabled. Add SUPERMEMORY_API_KEY in .env and restart.";
 
-	// Load initial config
-	useEffect(() => {
-		const loadConfig = async () => {
-			try {
-				const config = await window.electronAPI.getCustomizeConfig();
-				if (config) {
-					setPersonalizationAvailable(true);
-					setSelectedRole(config.role || "default");
-					setCustomRoleText(config.customRoleText || "");
-					setTextContext(config.textContext || "");
-					setUserFacts(config.userFacts?.join("\n") || "");
-					const docs = await window.electronAPI.getDocuments();
-					setDocuments(docs || []);
+	// Personalization state
+	const [selectedRole, setSelectedRole] = useState("default");
+	const [customRoleText, setCustomRoleText] = useState("");
+	const [textContext, setTextContext] = useState("");
+	const [userFacts, setUserFacts] = useState("");
 
-					const entries = await window.electronAPI.getAboutYouEntries();
-					setAboutYouEntries(entries || []);
-				} else {
-					setPersonalizationAvailable(false);
-					setDocuments([]);
-					setAboutYouEntries([]);
-				}
-			} catch (error) {
-				console.error("Error loading customize config:", error);
-				setPersonalizationAvailable(false);
-			}
-		};
+	const [aboutYouEntries, setAboutYouEntries] = useState<AboutYouEntry[]>([]);
+	const [isAddingEntry, setIsAddingEntry] = useState(false);
+	const [newEntryTitle, setNewEntryTitle] = useState("");
+	const [newEntryContent, setNewEntryContent] = useState("");
+	const [editingEntry, setEditingEntry] = useState<AboutYouEntry | null>(null);
+	const [editTitle, setEditTitle] = useState("");
+	const [editContent, setEditContent] = useState("");
 
-		loadConfig();
-	}, []);
+	// Knowledge base state
+	const [kbOverview, setKbOverview] = useState<KnowledgeBaseOverview | null>(null);
+	const [kbLoading, setKbLoading] = useState(false);
+	const [isUploading, setIsUploading] = useState(false);
+	const [kbUrl, setKbUrl] = useState("");
+	const [kbUrlTitle, setKbUrlTitle] = useState("");
+	const [kbNoteTitle, setKbNoteTitle] = useState("");
+	const [kbNoteContent, setKbNoteContent] = useState("");
 
-	// Show temporary status message
+	// Integrations state
+	const [connections, setConnections] = useState<SupermemoryConnection[]>([]);
+	const [connectionsLoading, setConnectionsLoading] = useState(false);
+	const [providerDocs, setProviderDocs] = useState<Record<string, ConnectionDocument[]>>(
+		{},
+	);
+
+	// Profile state
+	const [userProfile, setUserProfile] = useState<{
+		static: string[];
+		dynamic: string[];
+	} | null>(null);
+	const [profileLoading, setProfileLoading] = useState(false);
+
+	// Reset confirmation
+	const [showResetConfirm, setShowResetConfirm] = useState(false);
+	const [isResetting, setIsResetting] = useState(false);
+
 	const showStatus = useCallback(
 		(type: "success" | "error", message: string) => {
 			setSaveStatus({ type, message });
@@ -260,15 +252,92 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 		[],
 	);
 
-	const requirePersonalization = (): boolean => {
-		if (personalizationAvailable) return true;
+	const requireSupermemory = useCallback((): boolean => {
+		if (supermemoryAvailable) return true;
 		showStatus("error", PERSONALIZATION_DISABLED_MESSAGE);
 		return false;
-	};
+	}, [supermemoryAvailable, showStatus]);
 
-	// Handle role change
+	const refreshKnowledgeBase = useCallback(async () => {
+		if (!requireSupermemory()) return;
+		setKbLoading(true);
+		try {
+			const result = await window.electronAPI.getKnowledgeBaseOverview();
+			if (result.success && result.data) {
+				setKbOverview(result.data);
+			} else {
+				showStatus("error", result.error || "Failed to load knowledge base");
+			}
+		} catch (error) {
+			showStatus("error", "Failed to load knowledge base");
+		} finally {
+			setKbLoading(false);
+		}
+	}, [requireSupermemory, showStatus]);
+
+	const refreshConnections = useCallback(async () => {
+		if (!requireSupermemory()) return;
+		setConnectionsLoading(true);
+		try {
+			const result = await window.electronAPI.listConnections();
+			if (result.success && result.data) {
+				setConnections(result.data);
+			} else {
+				showStatus("error", result.error || "Failed to load integrations");
+			}
+		} catch {
+			showStatus("error", "Failed to load integrations");
+		} finally {
+			setConnectionsLoading(false);
+		}
+	}, [requireSupermemory, showStatus]);
+
+	const refreshProfile = useCallback(async () => {
+		if (!requireSupermemory()) return;
+		setProfileLoading(true);
+		try {
+			const profile = await window.electronAPI.getUserProfile();
+			setUserProfile(profile);
+		} catch {
+			setUserProfile(null);
+		} finally {
+			setProfileLoading(false);
+		}
+	}, [requireSupermemory]);
+
+	useEffect(() => {
+		const loadConfig = async () => {
+			try {
+				const config = await window.electronAPI.getCustomizeConfig();
+				if (config) {
+					setSupermemoryAvailable(true);
+					setSelectedRole(config.role || "default");
+					setCustomRoleText(config.customRoleText || "");
+					setTextContext(config.textContext || "");
+					setUserFacts(config.userFacts?.join("\n") || "");
+					const entries = await window.electronAPI.getAboutYouEntries();
+					setAboutYouEntries(entries || []);
+					await Promise.allSettled([
+						refreshKnowledgeBase(),
+						refreshConnections(),
+						refreshProfile(),
+					]);
+				} else {
+					setSupermemoryAvailable(false);
+					setAboutYouEntries([]);
+				}
+			} catch (error) {
+				console.error("Error loading customize config:", error);
+				setSupermemoryAvailable(false);
+			}
+		};
+
+		void loadConfig();
+	}, []);
+
+	// Role change
 	const handleRoleChange = async (role: string) => {
-		if (!requirePersonalization()) return;
+		if (!requireSupermemory()) return;
 		const previousRole = selectedRole;
 		setSelectedRole(role);
 		if (role !== "custom") {
@@ -280,70 +349,58 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 					showStatus("error", result.error || "Failed to update role");
 					setSelectedRole(previousRole);
 				}
-			} catch (error) {
+			} catch {
 				showStatus("error", "Failed to update role");
 				setSelectedRole(previousRole);
 			}
 		}
 	};
 
-	// Handle custom role save
 	const handleCustomRoleSave = async () => {
 		if (!customRoleText.trim()) {
 			showStatus("error", "Please enter a custom role description");
 			return;
 		}
-		if (!requirePersonalization()) return;
+		if (!requireSupermemory()) return;
 		try {
 			const result = await window.electronAPI.setRole("custom", customRoleText);
-			if (result.success) {
-				showStatus("success", "Custom role saved");
-			} else {
-				showStatus("error", result.error || "Failed to save custom role");
-			}
-		} catch (error) {
+			if (result.success) showStatus("success", "Custom role saved");
+			else showStatus("error", result.error || "Failed to save custom role");
+		} catch {
 			showStatus("error", "Failed to save custom role");
 		}
 	};
 
-	// Handle text context save
 	const handleTextContextSave = async () => {
-		if (!requirePersonalization()) return;
+		if (!requireSupermemory()) return;
 		try {
 			const result = await window.electronAPI.setTextContext(textContext);
-			if (result.success) {
-				showStatus("success", "Context saved");
-			} else {
-				showStatus("error", result.error || "Failed to save context");
-			}
-		} catch (error) {
+			if (result.success) showStatus("success", "Context saved");
+			else showStatus("error", result.error || "Failed to save context");
+		} catch {
 			showStatus("error", "Failed to save context");
 		}
 	};
 
-	// Handle user facts save
 	const handleUserFactsSave = async () => {
-		if (!requirePersonalization()) return;
+		if (!requireSupermemory()) return;
 		try {
 			const facts = userFacts
 				.split("\n")
 				.map((f) => f.trim())
 				.filter(Boolean);
 			const result = await window.electronAPI.setUserFacts(facts);
-			if (result.success) {
-				showStatus("success", "Notes saved");
-			} else {
-				showStatus("error", result.error || "Failed to save notes");
-			}
-		} catch (error) {
+			if (result.success) showStatus("success", "Notes saved");
+			else showStatus("error", result.error || "Failed to save notes");
+		} catch {
 			showStatus("error", "Failed to save notes");
 		}
 	};
 
-	// Handle file upload
-	const handleFileUpload = async (files: FileList | null) => {
+	// Knowledge base: file upload
+	const handleKnowledgeFileUpload = async (files: FileList | null) => {
 		if (!files || files.length === 0) return;
-		if (!requirePersonalization()) return;
+		if (!requireSupermemory()) return;
 
 		setIsUploading(true);
 		try {
@@ -358,76 +415,109 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 
 				setUploadStats((prev) => ({ ...prev, currentUploadName: file.name }));
 
-				let result:
-					| { success: boolean; data?: { id: string; status: string }; error?: string }
-					| undefined;
-
 				const bytes = new Uint8Array(await file.arrayBuffer());
-				result = await window.electronAPI.uploadDocumentData({
+				const result = await window.electronAPI.uploadDocumentData({
 					name: file.name,
 					data: bytes,
 					mimeType: file.type || undefined,
 				});
 
-				if (result.success && result.data) {
-					uploadedCount += 1;
-				} else {
-					failedCount += 1;
-					console.warn(
-						"[CustomizePanel] Document upload failed:",
-						file.name,
-						result.error,
-					);
-				}
+				if (result.success && result.data) uploadedCount += 1;
+				else failedCount += 1;
 			}
-
-			const docs = await window.electronAPI.getDocuments();
-			setDocuments(docs || []);
 
 			setUploadStats((prev) => ({
 				uploadedThisSession: prev.uploadedThisSession + uploadedCount,
 				currentUploadName: "",
 			}));
 
-			if (uploadedCount > 0 && failedCount === 0) {
+			if (uploadedCount > 0) {
 				showStatus(
-					"success",
-					`Uploaded ${uploadedCount} file${uploadedCount === 1 ? "" : "s"}`,
-				);
-			} else if (uploadedCount > 0 && failedCount > 0) {
-				showStatus(
-					"error",
-					`Uploaded ${uploadedCount}, failed ${failedCount}`,
+					failedCount > 0 ? "error" : "success",
+					failedCount > 0
+						? `Uploaded ${uploadedCount}, failed ${failedCount}`
+						: `Uploaded ${uploadedCount} file${uploadedCount === 1 ? "" : "s"}`,
 				);
 			} else if (failedCount > 0) {
 				showStatus("error", "Upload failed");
 			}
-		} catch (error) {
+		} catch {
 			setUploadStats((prev) => ({ ...prev, currentUploadName: "" }));
 			showStatus("error", "Failed to upload file");
 		} finally {
 			setIsUploading(false);
+			await refreshKnowledgeBase();
 		}
 	};
 
-	// Handle document delete
 	const handleDeleteDocument = async (docId: string) => {
-		if (!requirePersonalization()) return;
+		if (!requireSupermemory()) return;
 		try {
 			const result = await window.electronAPI.deleteDocument(docId);
 			if (result.success) {
-				setDocuments((docs) => docs.filter((d) => d.id !== docId));
-				showStatus("success", "Document removed");
+				showStatus("success", "Removed");
+				await refreshKnowledgeBase();
 			} else {
-				showStatus("error", result.error || "Failed to remove document");
+				showStatus("error", result.error || "Failed to remove");
 			}
-		} catch (error) {
-			showStatus("error", "Failed to remove document");
+		} catch {
+			showStatus("error", "Failed to remove");
 		}
 	};
 
-	// ==================== About You Handlers ====================
+	const handleAddUrl = async () => {
+		if (!kbUrl.trim()) {
+			showStatus("error", "Enter a URL");
+			return;
+		}
+		if (!requireSupermemory()) return;
+		try {
+			const result = await window.electronAPI.addKnowledgeUrl({
+				url: kbUrl.trim(),
+				title: kbUrlTitle.trim() || undefined,
+			});
+			if (result.success) {
+				setKbUrl("");
+				setKbUrlTitle("");
+				showStatus("success", "Link added");
+				await refreshKnowledgeBase();
+			} else {
+				showStatus("error", result.error || "Failed to add link");
+			}
+		} catch {
+			showStatus("error", "Failed to add link");
+		}
+	};
 
+	const handleAddNote = async () => {
+		if (!kbNoteTitle.trim()) {
+			showStatus("error", "Enter a title");
+			return;
+		}
+		if (!kbNoteContent.trim()) {
+			showStatus("error", "Enter note content");
+			return;
+		}
+		if (!requireSupermemory()) return;
+		try {
+			const result = await window.electronAPI.addKnowledgeText({
+				title: kbNoteTitle.trim(),
+				content: kbNoteContent.trim(),
+			});
+			if (result.success) {
+				setKbNoteTitle("");
+				setKbNoteContent("");
+				showStatus("success", "Note saved");
+				await refreshKnowledgeBase();
+			} else {
+				showStatus("error", result.error || "Failed to save note");
+			}
+		} catch {
+			showStatus("error", "Failed to save note");
+		}
+	};
+
+	// About You (text entries only)
 	const handleAddTextEntry = async () => {
 		if (!newEntryTitle.trim()) {
 			showStatus("error", "Please enter a title");
@@ -437,7 +527,7 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 			showStatus("error", "Please enter content");
 			return;
 		}
-		if (!requirePersonalization()) return;
+		if (!requireSupermemory()) return;
 
 		try {
 			const result = await window.electronAPI.addAboutYouTextEntry(
@@ -453,59 +543,8 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 			} else {
 				showStatus("error", result.error || "Failed to add entry");
 			}
-		} catch (error) {
+		} catch {
 			showStatus("error", "Failed to add entry");
-		}
-	};
-
-	const handleAboutYouFileUpload = async (files: FileList | null) => {
-		if (!files || files.length === 0) return;
-		if (!newEntryTitle.trim()) {
-			showStatus("error", "Please enter a title first");
-			return;
-		}
-		if (!requirePersonalization()) return;
-
-		setIsAboutYouUploading(true);
-		try {
-			const file = files[0];
-			if (file.size > MAX_UPLOAD_BYTES) {
-				showStatus("error", "File is too large");
-				return;
-			}
-
-			setUploadStats((prev) => ({ ...prev, currentUploadName: file.name }));
-
-			let result:
-				| { success: boolean; data?: AboutYouEntry; error?: string }
-				| undefined;
-
-			const bytes = new Uint8Array(await file.arrayBuffer());
-			result = await window.electronAPI.addAboutYouFileEntryData({
-				title: newEntryTitle.trim(),
-				name: file.name,
-				data: bytes,
-				mimeType: file.type || undefined,
-			});
-
-			if (result.success && result.data) {
-				setAboutYouEntries((entries) => [...entries, result.data!]);
-				setNewEntryTitle("");
-				setIsAddingEntry(false);
-				setUploadStats((prev) => ({
-					uploadedThisSession: prev.uploadedThisSession + 1,
-					currentUploadName: "",
-				}));
-				showStatus("success", `Added ${file.name}`);
-			} else {
-				setUploadStats((prev) => ({ ...prev, currentUploadName: "" }));
-				showStatus("error", result.error || `Failed to add ${file.name}`);
-			}
-		} catch (error) {
-			setUploadStats((prev) => ({ ...prev, currentUploadName: "" }));
-			showStatus("error", "Failed to add file");
-		} finally {
-			setIsAboutYouUploading(false);
 		}
 	};
 
@@ -534,22 +573,20 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 			);
 			if (result.success && result.data) {
 				setAboutYouEntries((entries) =>
-					entries.map((e) =>
-						e.id === editingEntry.id ? result.data! : e,
-					),
+					entries.map((e) => (e.id === editingEntry.id ? result.data! : e)),
 				);
 				setEditingEntry(null);
 				showStatus("success", "Entry updated");
 			} else {
 				showStatus("error", result.error || "Failed to update entry");
 			}
-		} catch (error) {
+		} catch {
 			showStatus("error", "Failed to update entry");
 		}
 	};
 
 	const handleDeleteEntry = async (id: string) => {
-		if (!requirePersonalization()) return;
+		if (!requireSupermemory()) return;
 		try {
 			const result = await window.electronAPI.deleteAboutYouEntry(id);
 			if (result.success) {
@@ -558,12 +595,84 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 			} else {
 				showStatus("error", result.error || "Failed to remove entry");
 			}
-		} catch (error) {
+		} catch {
 			showStatus("error", "Failed to remove entry");
 		}
 	};
 
-	// ==================== Full Reset Handler ====================
+	// Integrations
+	const providerById = useMemo(() => {
+		return new Map(PROVIDERS.map((p) => [p.id, p] as const));
+	}, []);
+
+	const connectionByProvider = useMemo(() => {
+		const map = new Map<SupermemoryProvider, SupermemoryConnection>();
+		for (const conn of connections) {
+			const provider = conn.provider as SupermemoryProvider;
+			if (providerById.has(provider)) map.set(provider, conn);
+		}
+		return map;
+	}, [connections, providerById]);
+
+	const handleConnect = async (provider: SupermemoryProvider) => {
+		if (!requireSupermemory()) return;
+		try {
+			const result = await window.electronAPI.createConnection({ provider });
+			if (result.success && result.data) {
+				const opened = await window.electronAPI.openExternalUrl(result.data.authLink);
+				if (!opened.success) {
+					showStatus("error", opened.error || "Failed to open authorization link");
+				} else {
+					showStatus("success", "Finish authorization in your browser");
+				}
+				await refreshConnections();
+			} else {
+				showStatus("error", result.error || "Failed to start connection");
+			}
+		} catch {
+			showStatus("error", "Failed to start connection");
+		}
+	};
+
+	const handleSync = async (provider: SupermemoryProvider) => {
+		if (!requireSupermemory()) return;
+		try {
+			const result = await window.electronAPI.syncConnection(provider);
+			if (result.success) showStatus("success", result.data?.message || "Sync started");
+			else showStatus("error", result.error || "Failed to start sync");
+		} catch {
+			showStatus("error", "Failed to start sync");
+		}
+	};
+
+	const handleDisconnect = async (provider: SupermemoryProvider) => {
+		if (!requireSupermemory()) return;
+		try {
+			const result = await window.electronAPI.deleteConnection(provider);
+			if (result.success) {
+				showStatus("success", "Disconnected");
+				await refreshConnections();
+			} else {
+				showStatus("error", result.error || "Failed to disconnect");
+			}
+		} catch {
+			showStatus("error", "Failed to disconnect");
+		}
+	};
+
+	const handleLoadProviderDocs = async (provider: SupermemoryProvider) => {
+		if (!requireSupermemory()) return;
+		try {
+			const result = await window.electronAPI.listConnectionDocuments(provider);
+			if (result.success && result.data) {
+				setProviderDocs((prev) => ({ ...prev, [provider]: result.data! }));
+			} else {
+				showStatus("error", result.error || "Failed to load documents");
+			}
+		} catch {
+			showStatus("error", "Failed to load documents");
+		}
+	};
 
 	const handleFullReset = async () => {
 		setIsResetting(true);
@@ -573,27 +682,45 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 				setSelectedRole("default");
 				setCustomRoleText("");
 				setTextContext("");
-				setDocuments([]);
 				setUserFacts("");
 				setAboutYouEntries([]);
+				setKbOverview(null);
+				setConnections([]);
+				setProviderDocs({});
+				setUserProfile(null);
 				setShowResetConfirm(false);
 				showStatus("success", "All settings reset");
 			} else {
 				showStatus("error", result.error || "Failed to reset");
 			}
-		} catch (error) {
+		} catch {
 			showStatus("error", "Failed to reset");
 		} finally {
 			setIsResetting(false);
 		}
 	};
 
+	const kbReadyDocs = kbOverview?.ready ?? [];
+	const kbProcessing = kbOverview?.processing ?? [];
+
 	return (
-		<div className="bg-black/60 backdrop-blur-xl border border-white/20 rounded-2xl p-4 w-full min-w-[300px] max-w-[420px]">
-			{/* Header */}
+		<div className="bg-black/60 backdrop-blur-xl border border-white/20 rounded-2xl p-4 w-full min-w-[300px] max-w-[460px]">
 			<div className="flex items-center justify-between mb-3 pb-3 border-b border-white/10">
 				<h3 className="text-sm font-medium text-white/90">Customize</h3>
 				<div className="flex items-center gap-2">
+					<button
+						type="button"
+						onClick={() => {
+							if (activeTab === "knowledge") refreshKnowledgeBase();
+							if (activeTab === "integrations") refreshConnections();
+							if (activeTab === "personal") refreshProfile();
+						}}
+						disabled={!supermemoryAvailable}
+						className="text-white/50 hover:text-white/80 transition-colors disabled:opacity-50"
+						title="Refresh"
+					>
+						<IoRefresh className={`w-4 h-4 ${kbLoading || connectionsLoading || profileLoading ? "animate-spin" : ""}`} />
+					</button>
 					{onClose && (
 						<button
 							type="button"
@@ -606,7 +733,6 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 				</div>
 			</div>
 
-			{/* Status message */}
 			{saveStatus.type && (
 				<div
 					className={`text-xs px-3 py-2 rounded-lg mb-3 ${
@@ -619,33 +745,63 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 				</div>
 			)}
 
-			{/* Personalization Disabled Banner */}
-			{!personalizationAvailable && (
+			{!supermemoryAvailable && (
 				<div className="text-xs px-3 py-2 rounded-lg mb-3 bg-yellow-500/10 text-yellow-300 border border-yellow-500/20">
 					Add `SUPERMEMORY_API_KEY` to your `.env` and restart to enable
-					personalization + file uploads.
+					personalization, knowledge base, and integrations.
 				</div>
 			)}
 
-			{/* Upload Progress */}
 			{uploadStats.currentUploadName && (
 				<div className="text-xs px-3 py-2 rounded-lg mb-3 bg-yellow-500/10 text-yellow-300 flex items-center gap-2">
 					<svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
-						<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-						<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+						<circle
+							className="opacity-25"
+							cx="12"
+							cy="12"
+							r="10"
+							stroke="currentColor"
+							strokeWidth="4"
+							fill="none"
+						/>
+						<path
+							className="opacity-75"
+							fill="currentColor"
+							d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+						/>
 					</svg>
 					Uploading {uploadStats.currentUploadName}...
 				</div>
 			)}
 
-			{/* Session Upload Stats */}
 			{uploadStats.uploadedThisSession > 0 && (
 				<div className="text-[10px] px-3 py-1.5 rounded-lg mb-3 bg-white/5 text-white/50">
-					Documents uploaded this session: {uploadStats.uploadedThisSession}
+					Uploaded this session: {uploadStats.uploadedThisSession}
 				</div>
 			)}
 
-			{/* Reset Confirmation */}
+			<div className="flex bg-white/5 rounded-lg p-1 mb-3">
+				{[
+					{ id: "knowledge", label: "Knowledge", icon: <IoDocumentText className="w-3 h-3" /> },
+					{ id: "integrations", label: "Integrations", icon: <IoSettings className="w-3 h-3" /> },
+					{ id: "personal", label: "Personal", icon: <IoPersonCircle className="w-3 h-3" /> },
+				].map((tab) => (
+					<button
+						key={tab.id}
+						type="button"
+						onClick={() => setActiveTab(tab.id as TabKey)}
+						className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-md text-[10px] transition-colors ${
+							activeTab === tab.id
+								? "bg-white/15 text-white/90"
+								: "text-white/50 hover:text-white/80 hover:bg-white/10"
+						}`}
+					>
+						{tab.icon}
+						{tab.label}
+					</button>
+				))}
+			</div>
+
 			{showResetConfirm && (
 				<div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-3">
 					<div className="flex items-start gap-2">
@@ -653,7 +809,7 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 						<div className="flex-1">
 							<p className="text-xs text-white/90 font-medium">Reset All?</p>
 							<p className="text-[10px] text-white/60 mt-1">
-								This will delete all personal data and settings.
+								This deletes local personalization and clears saved data.
 							</p>
 						</div>
 					</div>
@@ -677,75 +833,352 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 				</div>
 			)}
 
-			{/* Scrollable Content */}
 			<div className="max-h-[60vh] overflow-y-auto overflow-x-hidden pr-1 space-y-1">
-				{/* About You Section */}
-				<Section
-					title="About You"
-					icon={<IoPersonCircle className="w-4 h-4" />}
-					defaultOpen={true}
-					badge={aboutYouEntries.length}
-				>
-					<p className="text-[10px] text-white/40 mb-2">
-						Personal info the assistant will remember.
-					</p>
+				{activeTab === "knowledge" && (
+					<>
+						<Section
+							title="Add Files"
+							icon={<IoCloudUpload className="w-4 h-4" />}
+							defaultOpen={true}
+							>
+								<p className="text-[10px] text-white/40 mb-2">
+									Upload PDFs, docs, images, or CSVs. Once processed, you can ask questions and get answers grounded in your files.
+								</p>
+							<FileDropZone
+								accept=".pdf,.txt,.md,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.csv,.mp4,.webm"
+								multiple
+								disabled={isUploading || !supermemoryAvailable}
+								helperText={isUploading ? "Uploading..." : "Drag & drop or"}
+								onFilesSelected={handleKnowledgeFileUpload}
+							/>
+							<button
+								type="button"
+								onClick={refreshKnowledgeBase}
+								disabled={!supermemoryAvailable}
+								className="mt-2 px-2 py-1 bg-white/10 hover:bg-white/20 text-white/90 text-[10px] rounded-md disabled:opacity-50"
+							>
+								Refresh status
+							</button>
+						</Section>
 
-					{/* Add Entry Button */}
-					{!isAddingEntry && (
-						<button
-							type="button"
-							onClick={() => setIsAddingEntry(true)}
-							disabled={!personalizationAvailable}
-							className="w-full flex items-center justify-center gap-1 py-2 text-xs text-white/60 hover:text-white/80 hover:bg-white/5 rounded-lg transition-colors border border-dashed border-white/20"
-						>
-							<IoAdd className="w-3 h-3" />
-							Add Entry
-						</button>
-					)}
-
-					{/* Add Entry Form */}
-					{isAddingEntry && (
-						<div className="bg-white/5 rounded-lg p-3 space-y-2">
-							<div className="flex gap-2 mb-2">
+							<Section title="Add Link" icon={<IoLink className="w-4 h-4" />}>
+								<p className="text-[10px] text-white/40 mb-2">
+									Paste a URL (docs page, article, video). Re-adding the same URL updates instead of duplicating.
+								</p>
+							<input
+								value={kbUrlTitle}
+								onChange={(e) => setKbUrlTitle(e.target.value)}
+								disabled={!supermemoryAvailable}
+								placeholder="Optional label (e.g., API docs)"
+								className="w-full bg-white/10 text-white text-xs rounded-md px-2 py-1.5 border border-white/20 focus:outline-none focus:border-white/40 placeholder-white/40"
+							/>
+							<input
+								value={kbUrl}
+								onChange={(e) => setKbUrl(e.target.value)}
+								disabled={!supermemoryAvailable}
+								placeholder="https://..."
+								className="mt-2 w-full bg-white/10 text-white text-xs rounded-md px-2 py-1.5 border border-white/20 focus:outline-none focus:border-white/40 placeholder-white/40"
+							/>
+							<div className="flex justify-end mt-2">
 								<button
 									type="button"
-									onClick={() => setAddEntryType("text")}
-									className={`flex-1 px-2 py-1 text-[10px] rounded-md transition-colors ${
-										addEntryType === "text"
-											? "bg-white/20 text-white"
-											: "bg-white/5 text-white/50"
-									}`}
+									onClick={handleAddUrl}
+									disabled={!supermemoryAvailable}
+									className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white/90 text-[10px] rounded-md disabled:opacity-50"
 								>
-									Text
+									Add link
 								</button>
+							</div>
+						</Section>
+
+							<Section title="Add Note" icon={<IoDocumentText className="w-4 h-4" />}>
+								<p className="text-[10px] text-white/40 mb-2">
+									Short, high-signal notes (playbooks, policies, meeting context). Use a stable title to update instead of duplicating.
+								</p>
+							<input
+								value={kbNoteTitle}
+								onChange={(e) => setKbNoteTitle(e.target.value)}
+								disabled={!supermemoryAvailable}
+								placeholder="Title (unique)"
+								className="w-full bg-white/10 text-white text-xs rounded-md px-2 py-1.5 border border-white/20 focus:outline-none focus:border-white/40 placeholder-white/40"
+							/>
+							<textarea
+								value={kbNoteContent}
+								onChange={(e) => setKbNoteContent(e.target.value)}
+								disabled={!supermemoryAvailable}
+								placeholder="Write the note..."
+								className="mt-2 w-full bg-white/10 text-white text-xs rounded-md px-2 py-1.5 border border-white/20 focus:outline-none focus:border-white/40 min-h-[80px] resize-none placeholder-white/40"
+							/>
+							<div className="flex justify-end mt-2">
 								<button
 									type="button"
-									onClick={() => setAddEntryType("file")}
-									className={`flex-1 px-2 py-1 text-[10px] rounded-md transition-colors ${
-										addEntryType === "file"
-											? "bg-white/20 text-white"
-											: "bg-white/5 text-white/50"
-									}`}
+									onClick={handleAddNote}
+									disabled={!supermemoryAvailable}
+									className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white/90 text-[10px] rounded-md disabled:opacity-50"
 								>
-									File
+									Save note
+								</button>
+							</div>
+						</Section>
+
+						<Section
+							title="Ready To Use"
+							icon={<IoDocumentText className="w-4 h-4" />}
+							defaultOpen={true}
+							badge={kbReadyDocs.length}
+						>
+								<div className="flex items-center justify-between mb-2">
+									<p className="text-[10px] text-white/40">
+										Processed documents that are ready for grounded answers.
+									</p>
+								<button
+									type="button"
+									onClick={refreshKnowledgeBase}
+									disabled={!supermemoryAvailable}
+									className="text-[10px] text-white/50 hover:text-white/80 disabled:opacity-50"
+								>
+									Refresh
+								</button>
+							</div>
+							{kbReadyDocs.length === 0 ? (
+								<p className="text-[10px] text-white/40">
+									No ready documents yet.
+								</p>
+							) : (
+								<div className="space-y-1">
+									{kbReadyDocs.slice(0, 30).map((doc) => (
+										<div
+											key={doc.id}
+											className="flex items-start justify-between gap-2 bg-white/5 rounded-md px-2 py-2"
+										>
+											<div className="min-w-0 flex-1">
+												<span className="text-[11px] font-medium text-white/80 block truncate">
+													{formatDocTitle(doc)}
+												</span>
+												<p className="text-[9px] text-white/40 truncate">
+													{formatDocSubtitle(doc)}
+												</p>
+												{typeof doc.summary === "string" && doc.summary.trim() && (
+													<p className="text-[9px] text-white/50 mt-1 line-clamp-2">
+														{doc.summary}
+													</p>
+												)}
+											</div>
+											<button
+												type="button"
+												onClick={() => handleDeleteDocument(doc.id)}
+												className="text-red-400/70 hover:text-red-400 flex-shrink-0"
+												title="Remove"
+											>
+												<IoTrash className="w-3 h-3" />
+											</button>
+										</div>
+									))}
+									{kbReadyDocs.length > 30 && (
+										<p className="text-[10px] text-white/40">
+											Showing 30 of {kbReadyDocs.length}.
+										</p>
+									)}
+								</div>
+							)}
+						</Section>
+
+						<Section
+							title="Processing"
+							icon={<IoSync className="w-4 h-4" />}
+							badge={kbProcessing.length}
+						>
+								<p className="text-[10px] text-white/40 mb-2">
+									Uploads and integrations may take a minute to become searchable. If something isn’t found yet, try again once processing finishes.
+								</p>
+							{kbProcessing.length === 0 ? (
+								<p className="text-[10px] text-white/40">Nothing processing.</p>
+							) : (
+								<div className="space-y-1">
+									{kbProcessing.slice(0, 20).map((doc) => (
+										<div
+											key={doc.id}
+											className="flex items-center justify-between bg-white/5 rounded-md px-2 py-1.5"
+										>
+											<span className="text-[10px] text-white/70 truncate">
+												{doc.title || doc.id}
+											</span>
+											<span className="text-[10px] text-white/40">
+												{doc.status}
+											</span>
+										</div>
+									))}
+								</div>
+							)}
+						</Section>
+					</>
+				)}
+
+				{activeTab === "integrations" && (
+					<>
+						<Section
+							title="Connected Integrations"
+							icon={<IoSettings className="w-4 h-4" />}
+							defaultOpen={true}
+							badge={connections.length}
+						>
+								<div className="flex items-center justify-between mb-2">
+									<p className="text-[10px] text-white/40">
+										Connect sources, then sync to index content into your knowledge base.
+									</p>
+								<button
+									type="button"
+									onClick={refreshConnections}
+									disabled={!supermemoryAvailable}
+									className="text-[10px] text-white/50 hover:text-white/80 disabled:opacity-50"
+								>
+									Refresh
 								</button>
 							</div>
 
-							<input
-								type="text"
-								value={newEntryTitle}
-								onChange={(e) => setNewEntryTitle(e.target.value)}
-								placeholder="Title (e.g., My Resume)"
-								className="w-full bg-white/10 text-white text-xs rounded-md px-2 py-1.5 border border-white/20 focus:outline-none focus:border-white/40 placeholder-white/40"
-							/>
+							<div className="space-y-2">
+								{PROVIDERS.map((p) => {
+									const conn = connectionByProvider.get(p.id);
+									return (
+										<div key={p.id} className="bg-white/5 rounded-lg p-3">
+											<div className="flex items-start justify-between gap-2">
+												<div className="min-w-0 flex-1">
+													<p className="text-xs text-white/90 font-medium">
+														{p.label}
+													</p>
+													<p className="text-[10px] text-white/40 mt-0.5">
+														{p.description}
+													</p>
+													{conn?.email && (
+														<p className="text-[10px] text-white/50 mt-1 truncate">
+															{conn.email}
+														</p>
+													)}
+													{conn && (
+														<p className="text-[10px] text-white/40 mt-1">
+															Connected • {conn.id}
+														</p>
+													)}
+												</div>
+												<div className="flex items-center gap-1 flex-shrink-0">
+													{conn ? (
+														<>
+															<button
+																type="button"
+																onClick={() => handleSync(p.id)}
+																disabled={!supermemoryAvailable}
+																className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white/90 text-[10px] rounded-md disabled:opacity-50"
+															>
+																Sync
+															</button>
+															<button
+																type="button"
+																onClick={() => handleDisconnect(p.id)}
+																disabled={!supermemoryAvailable}
+																className="px-2 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-200 text-[10px] rounded-md disabled:opacity-50"
+															>
+																Disconnect
+															</button>
+														</>
+													) : (
+														<button
+															type="button"
+															onClick={() => handleConnect(p.id)}
+															disabled={!supermemoryAvailable}
+															className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white/90 text-[10px] rounded-md disabled:opacity-50"
+														>
+															Connect
+														</button>
+													)}
+												</div>
+											</div>
 
-							{addEntryType === "text" ? (
-								<>
+											{conn && (
+												<div className="flex items-center gap-2 mt-2">
+													<button
+														type="button"
+														onClick={() => handleLoadProviderDocs(p.id)}
+														disabled={!supermemoryAvailable}
+														className="text-[10px] text-white/50 hover:text-white/80 disabled:opacity-50"
+													>
+														Show documents
+													</button>
+												</div>
+											)}
+
+											{Array.isArray(providerDocs[p.id]) &&
+												providerDocs[p.id].length > 0 && (
+													<div className="mt-2 space-y-1">
+														{providerDocs[p.id].slice(0, 8).map((d) => (
+															<div
+																key={d.id}
+																className="flex items-center justify-between bg-black/20 rounded-md px-2 py-1.5"
+															>
+																<span className="text-[10px] text-white/70 truncate">
+																	{d.title || d.id}
+																</span>
+																<span className="text-[10px] text-white/40">
+																	{d.status}
+																</span>
+															</div>
+														))}
+														{providerDocs[p.id].length > 8 && (
+															<p className="text-[10px] text-white/40">
+																Showing 8 of {providerDocs[p.id].length}.
+															</p>
+														)}
+													</div>
+												)}
+										</div>
+									);
+								})}
+							</div>
+
+							{connectionsLoading && (
+								<p className="text-[10px] text-white/40 mt-2">Loading…</p>
+							)}
+						</Section>
+					</>
+				)}
+
+				{activeTab === "personal" && (
+					<>
+						<Section
+							title="About You"
+							icon={<IoPersonCircle className="w-4 h-4" />}
+							defaultOpen={true}
+							badge={aboutYouEntries.length}
+						>
+							<p className="text-[10px] text-white/40 mb-2">
+								Persistent personal facts and preferences. Keep it short and high-signal.
+							</p>
+
+							{!isAddingEntry && (
+								<button
+									type="button"
+									onClick={() => setIsAddingEntry(true)}
+									disabled={!supermemoryAvailable}
+									className="w-full flex items-center justify-center gap-1 py-2 text-xs text-white/60 hover:text-white/80 hover:bg-white/5 rounded-lg transition-colors border border-dashed border-white/20 disabled:opacity-50"
+								>
+									<IoAdd className="w-3 h-3" />
+									Add entry
+								</button>
+							)}
+
+							{isAddingEntry && (
+								<div className="bg-white/5 rounded-lg p-3 space-y-2">
+									<input
+										type="text"
+										value={newEntryTitle}
+										onChange={(e) => setNewEntryTitle(e.target.value)}
+										placeholder="Title (e.g., Work style)"
+										className="w-full bg-white/10 text-white text-xs rounded-md px-2 py-1.5 border border-white/20 focus:outline-none focus:border-white/40 placeholder-white/40"
+									/>
 									<textarea
 										value={newEntryContent}
 										onChange={(e) => setNewEntryContent(e.target.value)}
-										placeholder="Enter information..."
-										className="w-full bg-white/10 text-white text-xs rounded-md px-2 py-1.5 border border-white/20 focus:outline-none focus:border-white/40 min-h-[60px] resize-none placeholder-white/40"
+										placeholder="Write a few lines..."
+										className="w-full bg-white/10 text-white text-xs rounded-md px-2 py-1.5 border border-white/20 focus:outline-none focus:border-white/40 min-h-[70px] resize-none placeholder-white/40"
 									/>
 									<div className="flex justify-end gap-2">
 										<button
@@ -762,259 +1195,215 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 										<button
 											type="button"
 											onClick={handleAddTextEntry}
-											className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white/90 text-[10px] rounded-md"
+											disabled={!supermemoryAvailable}
+											className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white/90 text-[10px] rounded-md disabled:opacity-50"
 										>
 											Save
 										</button>
 									</div>
-								</>
-							) : (
-								<>
-									<FileDropZone
-										accept=".pdf,.txt,.md,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.csv"
-										disabled={
-											isAboutYouUploading ||
-											!newEntryTitle.trim() ||
-											!personalizationAvailable
-										}
-										helperText={
-											isAboutYouUploading ? "Uploading..." : "Drag file or"
-										}
-										onFilesSelected={handleAboutYouFileUpload}
-									/>
-									<div className="flex justify-end">
-										<button
-											type="button"
-											onClick={() => {
-												setIsAddingEntry(false);
-												setNewEntryTitle("");
-											}}
-											className="px-2 py-1 text-[10px] text-white/50 hover:text-white/70"
-										>
-											Cancel
-										</button>
-									</div>
-								</>
+								</div>
 							)}
-						</div>
-					)}
 
-					{/* Entry List */}
-					{aboutYouEntries.length > 0 && (
-						<div className="space-y-1 mt-2">
-							{aboutYouEntries.map((entry) => (
-								<div
-									key={entry.id}
-									className="bg-white/5 rounded-md p-2"
-								>
-									{editingEntry?.id === entry.id ? (
-										<div className="space-y-2">
-											<input
-												type="text"
-												value={editTitle}
-												onChange={(e) => setEditTitle(e.target.value)}
-												className="w-full bg-white/10 text-white text-xs rounded-md px-2 py-1 border border-white/20 focus:outline-none"
-											/>
-											<textarea
-												value={editContent}
-												onChange={(e) => setEditContent(e.target.value)}
-												className="w-full bg-white/10 text-white text-xs rounded-md px-2 py-1 border border-white/20 focus:outline-none min-h-[50px] resize-none"
-											/>
-											<div className="flex justify-end gap-2">
-												<button
-													type="button"
-													onClick={() => setEditingEntry(null)}
-													className="px-2 py-1 text-[10px] text-white/50"
-												>
-													Cancel
-												</button>
-												<button
-													type="button"
-													onClick={handleSaveEdit}
-													className="px-2 py-1 bg-white/10 text-white/90 text-[10px] rounded-md"
-												>
-													Save
-												</button>
-											</div>
-										</div>
-									) : (
-										<div className="flex items-start justify-between gap-2">
-											<div className="flex items-center gap-2 min-w-0 flex-1">
-												{entry.type === "file" ? (
-													<IoDocument className="w-3 h-3 text-white/50 flex-shrink-0" />
-												) : (
-													<IoDocumentText className="w-3 h-3 text-white/50 flex-shrink-0" />
-												)}
+							{aboutYouEntries.length > 0 && (
+								<div className="space-y-2 mt-2">
+									{aboutYouEntries.map((entry) => (
+										<div key={entry.id} className="bg-white/5 rounded-md p-2">
+											{editingEntry?.id === entry.id ? (
+												<div className="space-y-2">
+													<input
+														type="text"
+														value={editTitle}
+														onChange={(e) => setEditTitle(e.target.value)}
+														className="w-full bg-white/10 text-white text-xs rounded-md px-2 py-1 border border-white/20 focus:outline-none"
+													/>
+													<textarea
+														value={editContent}
+														onChange={(e) => setEditContent(e.target.value)}
+														className="w-full bg-white/10 text-white text-xs rounded-md px-2 py-1 border border-white/20 focus:outline-none min-h-[50px] resize-none"
+													/>
+													<div className="flex justify-end gap-2">
+														<button
+															type="button"
+															onClick={() => setEditingEntry(null)}
+															className="px-2 py-1 text-[10px] text-white/50"
+														>
+															Cancel
+														</button>
+														<button
+															type="button"
+															onClick={handleSaveEdit}
+															className="px-2 py-1 bg-white/10 text-white/90 text-[10px] rounded-md"
+														>
+															Save
+														</button>
+													</div>
+												</div>
+											) : (
+												<div className="flex items-start justify-between gap-2">
 													<div className="min-w-0 flex-1">
 														<span className="text-[11px] font-medium text-white/80 block truncate">
 															{entry.title}
 														</span>
-														<p className="text-[9px] text-white/40 truncate">
-															{entry.type === "file"
-																? entry.fileName || entry.content
-																: entry.content.length > 50
-																	? `${entry.content.substring(0, 50)}...`
-																	: entry.content}
+														<p className="text-[9px] text-white/40 mt-0.5 line-clamp-2">
+															{entry.content}
 														</p>
 													</div>
+													<div className="flex items-center gap-1 flex-shrink-0">
+														{entry.type === "text" && (
+															<button
+																type="button"
+																onClick={() => handleStartEdit(entry)}
+																className="text-white/40 hover:text-white/70 p-0.5"
+																title="Edit"
+															>
+																<IoCreate className="w-3 h-3" />
+															</button>
+														)}
+														<button
+															type="button"
+															onClick={() => handleDeleteEntry(entry.id)}
+															className="text-red-400/70 hover:text-red-400 p-0.5"
+															title="Remove"
+														>
+															<IoTrash className="w-3 h-3" />
+														</button>
+													</div>
 												</div>
-												<div className="flex items-center gap-1 flex-shrink-0">
-												{entry.type === "text" && (
-													<button
-														type="button"
-														onClick={() => handleStartEdit(entry)}
-														className="text-white/40 hover:text-white/70 p-0.5"
-													>
-														<IoCreate className="w-3 h-3" />
-													</button>
-												)}
-												<button
-													type="button"
-													onClick={() => handleDeleteEntry(entry.id)}
-													className="text-red-400/70 hover:text-red-400 p-0.5"
-												>
-													<IoTrash className="w-3 h-3" />
-												</button>
-											</div>
+											)}
 										</div>
-									)}
+									))}
 								</div>
-							))}
-						</div>
-					)}
-				</Section>
+							)}
+						</Section>
 
-				{/* Role Section */}
-				<Section
-					title="Assistant Role"
-					icon={<IoPersonCircle className="w-4 h-4" />}
-				>
-					<select
-						value={selectedRole}
-						onChange={(e) => handleRoleChange(e.target.value)}
-						disabled={!personalizationAvailable}
-						className="w-full bg-white/10 text-white text-xs rounded-md px-2 py-1.5 border border-white/20 focus:outline-none focus:border-white/40"
-					>
-						{Object.entries(ROLE_LABELS).map(([key, label]) => (
-							<option key={key} value={key} className="bg-gray-800 text-white">
-								{label}
-							</option>
-						))}
-					</select>
+						<Section title="Assistant Role" icon={<IoPersonCircle className="w-4 h-4" />}>
+							<select
+								value={selectedRole}
+								onChange={(e) => handleRoleChange(e.target.value)}
+								disabled={!supermemoryAvailable}
+								className="w-full bg-white/10 text-white text-xs rounded-md px-2 py-1.5 border border-white/20 focus:outline-none focus:border-white/40"
+							>
+								{Object.entries(ROLE_LABELS).map(([key, label]) => (
+									<option key={key} value={key} className="bg-gray-800 text-white">
+										{label}
+									</option>
+								))}
+							</select>
 
-					{selectedRole === "custom" && (
-						<div className="mt-2 space-y-2">
+							{selectedRole === "custom" && (
+								<div className="mt-2 space-y-2">
+									<textarea
+										value={customRoleText}
+										onChange={(e) => setCustomRoleText(e.target.value)}
+										disabled={!supermemoryAvailable}
+										placeholder="Describe the role..."
+										className="w-full bg-white/10 text-white text-xs rounded-md px-2 py-1.5 border border-white/20 focus:outline-none focus:border-white/40 min-h-[80px] resize-none placeholder-white/40"
+									/>
+									<button
+										type="button"
+										onClick={handleCustomRoleSave}
+										disabled={!supermemoryAvailable}
+										className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white/90 text-[10px] rounded-md disabled:opacity-50"
+									>
+										Apply
+									</button>
+								</div>
+							)}
+						</Section>
+
+						<Section title="Session Context" icon={<IoDocumentText className="w-4 h-4" />}>
+							<p className="text-[10px] text-white/40 mb-2">
+								Temporary context for the current session.
+							</p>
 							<textarea
-								value={customRoleText}
-								onChange={(e) => setCustomRoleText(e.target.value)}
-								disabled={!personalizationAvailable}
-								placeholder="Describe the role..."
-								className="w-full bg-white/10 text-white text-xs rounded-md px-2 py-1.5 border border-white/20 focus:outline-none focus:border-white/40 min-h-[60px] resize-none placeholder-white/40"
+								value={textContext}
+								onChange={(e) => setTextContext(e.target.value)}
+								disabled={!supermemoryAvailable}
+								placeholder="Meeting notes, background info..."
+								className="w-full bg-white/10 text-white text-xs rounded-md px-2 py-1.5 border border-white/20 focus:outline-none focus:border-white/40 min-h-[80px] resize-none placeholder-white/40"
 							/>
 							<button
 								type="button"
-								onClick={handleCustomRoleSave}
-								disabled={!personalizationAvailable}
-								className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white/90 text-[10px] rounded-md"
+								onClick={handleTextContextSave}
+								disabled={!supermemoryAvailable}
+								className="mt-2 px-2 py-1 bg-white/10 hover:bg-white/20 text-white/90 text-[10px] rounded-md disabled:opacity-50"
 							>
-								Apply
+								Save
 							</button>
-						</div>
-					)}
-				</Section>
+						</Section>
 
-				{/* Session Context Section */}
-				<Section
-					title="Session Context"
-					icon={<IoDocumentText className="w-4 h-4" />}
-				>
-					<p className="text-[10px] text-white/40 mb-2">
-						Temporary context for this session.
-					</p>
-					<textarea
-						value={textContext}
-						onChange={(e) => setTextContext(e.target.value)}
-						disabled={!personalizationAvailable}
-						placeholder="Meeting notes, background info..."
-						className="w-full bg-white/10 text-white text-xs rounded-md px-2 py-1.5 border border-white/20 focus:outline-none focus:border-white/40 min-h-[60px] resize-none placeholder-white/40"
-					/>
-					<button
-						type="button"
-						onClick={handleTextContextSave}
-						disabled={!personalizationAvailable}
-						className="mt-2 px-2 py-1 bg-white/10 hover:bg-white/20 text-white/90 text-[10px] rounded-md"
-					>
-						Save
-					</button>
-				</Section>
+						<Section title="Quick Notes" icon={<IoDocumentText className="w-4 h-4" />}>
+							<p className="text-[10px] text-white/40 mb-2">
+								Preferences or facts (one per line).
+							</p>
+							<textarea
+								value={userFacts}
+								onChange={(e) => setUserFacts(e.target.value)}
+								disabled={!supermemoryAvailable}
+								placeholder="- Keep answers concise\n- Ask clarifying questions"
+								className="w-full bg-white/10 text-white text-xs rounded-md px-2 py-1.5 border border-white/20 focus:outline-none focus:border-white/40 min-h-[80px] resize-none placeholder-white/40"
+							/>
+							<button
+								type="button"
+								onClick={handleUserFactsSave}
+								disabled={!supermemoryAvailable}
+								className="mt-2 px-2 py-1 bg-white/10 hover:bg-white/20 text-white/90 text-[10px] rounded-md disabled:opacity-50"
+							>
+								Save
+							</button>
+						</Section>
 
-				{/* Documents Section */}
-				<Section
-					title="Session Documents"
-					icon={<IoCloudUpload className="w-4 h-4" />}
-					badge={documents.length}
-				>
-					<FileDropZone
-						accept=".pdf,.txt,.md,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.csv"
-						multiple
-						disabled={isUploading || !personalizationAvailable}
-						helperText={isUploading ? "Uploading..." : "Drag & drop or"}
-						onFilesSelected={handleFileUpload}
-					/>
-
-					{documents.length > 0 && (
-						<div className="space-y-1 mt-2">
-							{documents.map((doc) => (
-								<div
-									key={doc.id}
-									className="flex items-center justify-between bg-white/5 rounded-md px-2 py-1.5"
-								>
-									<div className="flex items-center gap-2 min-w-0 flex-1">
-										<IoDocumentText className="w-3 h-3 text-white/50 flex-shrink-0" />
-										<span className="text-[10px] text-white/70 truncate">
-											{doc.name}
-										</span>
-									</div>
-									<button
-										type="button"
-										onClick={() => handleDeleteDocument(doc.id)}
-										className="text-red-400/70 hover:text-red-400 flex-shrink-0"
-									>
-										<IoTrash className="w-3 h-3" />
-									</button>
+						<Section title="Profile" icon={<IoPersonCircle className="w-4 h-4" />}>
+							<p className="text-[10px] text-white/40 mb-2">
+								Auto-generated preferences (static + dynamic). Refresh to update.
+							</p>
+							<button
+								type="button"
+								onClick={refreshProfile}
+								disabled={!supermemoryAvailable}
+								className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white/90 text-[10px] rounded-md disabled:opacity-50"
+							>
+								Refresh profile
+							</button>
+							{userProfile ? (
+								<div className="mt-2 space-y-2">
+									{userProfile.static?.length > 0 && (
+										<div className="bg-black/20 rounded-md p-2">
+											<p className="text-[10px] text-white/60 mb-1">Static</p>
+											<ul className="text-[10px] text-white/70 list-disc pl-4 space-y-0.5">
+												{userProfile.static.slice(0, 8).map((s) => (
+													<li key={s}>{s}</li>
+												))}
+											</ul>
+										</div>
+									)}
+									{userProfile.dynamic?.length > 0 && (
+										<div className="bg-black/20 rounded-md p-2">
+											<p className="text-[10px] text-white/60 mb-1">Dynamic</p>
+											<ul className="text-[10px] text-white/70 list-disc pl-4 space-y-0.5">
+												{userProfile.dynamic.slice(0, 8).map((s) => (
+													<li key={s}>{s}</li>
+												))}
+											</ul>
+										</div>
+									)}
+									{(userProfile.static?.length ?? 0) === 0 &&
+										(userProfile.dynamic?.length ?? 0) === 0 && (
+											<p className="text-[10px] text-white/40">
+												No profile items yet.
+											</p>
+										)}
 								</div>
-							))}
-						</div>
-					)}
-				</Section>
-
-				{/* Quick Notes Section */}
-				<Section
-					title="Quick Notes"
-					icon={<IoDocumentText className="w-4 h-4" />}
-				>
-					<p className="text-[10px] text-white/40 mb-2">
-						Preferences or facts (one per line).
-					</p>
-					<textarea
-						value={userFacts}
-						onChange={(e) => setUserFacts(e.target.value)}
-						disabled={!personalizationAvailable}
-						placeholder="- I prefer concise responses&#10;- My timezone is PST"
-						className="w-full bg-white/10 text-white text-xs rounded-md px-2 py-1.5 border border-white/20 focus:outline-none focus:border-white/40 min-h-[60px] resize-none placeholder-white/40"
-					/>
-					<button
-						type="button"
-						onClick={handleUserFactsSave}
-						disabled={!personalizationAvailable}
-						className="mt-2 px-2 py-1 bg-white/10 hover:bg-white/20 text-white/90 text-[10px] rounded-md"
-					>
-						Save
-					</button>
-				</Section>
+							) : (
+								<p className="text-[10px] text-white/40 mt-2">
+									No profile loaded.
+								</p>
+							)}
+						</Section>
+					</>
+				)}
 			</div>
 
-			{/* Footer with Reset */}
 			<div className="mt-3 pt-3 border-t border-white/10">
 				<button
 					type="button"

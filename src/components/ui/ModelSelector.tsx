@@ -107,6 +107,8 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 
 	const getModelDisplayName = (model: string) => {
 		switch (model) {
+			case "auto":
+				return "Auto (Smart)";
 			case "openai/gpt-oss-20b":
 				return "GPT-OSS 20B (Fast)";
 			case "openai/gpt-oss-120b":
@@ -149,6 +151,17 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 					Text Model
 				</span>
 				<div className="flex gap-2">
+					<button
+						type="button"
+						onClick={() => setSelectedModel("auto")}
+						className={`flex-1 px-3 py-2 rounded-lg text-xs transition-all ${
+							selectedModel === "auto"
+								? "bg-white/20 text-white border border-white/30"
+								: "bg-white/5 text-white/70 hover:bg-white/10"
+						}`}
+					>
+						Auto (Smart)
+					</button>
 					<button
 						type="button"
 						onClick={() => setSelectedModel("openai/gpt-oss-20b")}
@@ -205,6 +218,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 
 			{/* Help text */}
 			<div className="text-xs text-white/40 space-y-1">
+				<div>Auto: Picks the best model per message</div>
 				<div>GPT-OSS 20B: Faster responses, good for most tasks</div>
 				<div>GPT-OSS 120B: More powerful, better for complex problems</div>
 			</div>

@@ -3,20 +3,28 @@
 import dotenv from "dotenv";
 import fs from "node:fs";
 import path from "node:path";
-import { app } from "electron";
-import { LLMHelper } from "./LLMHelper";
-import {
-	SupermemoryHelper,
-	ROLE_PRESETS,
-	type CustomizeConfig,
-	type StoredDocument,
-	type AboutYouEntry,
-} from "./SupermemoryHelper";
-import type { AppState } from "./main";
+	import { app } from "electron";
+	import { LLMHelper } from "./LLMHelper";
+	import {
+		SupermemoryHelper,
+		ROLE_PRESETS,
+		type CustomizeConfig,
+		type StoredDocument,
+		type AboutYouEntry,
+		type ListDocumentsOptions,
+		type ListedDocument,
+		type ListDocumentsResponse,
+		type SupermemoryConnection,
+		type SupermemoryProvider,
+		type CreateConnectionResponse,
+		type DeleteConnectionResponse,
+		type ConnectionDocument,
+	} from "./SupermemoryHelper";
+	import type { AppState } from "./main";
 
 dotenv.config();
 
-type TextModel = "openai/gpt-oss-20b" | "openai/gpt-oss-120b";
+type TextModel = "auto" | "openai/gpt-oss-20b" | "openai/gpt-oss-120b";
 
 type ChatRole = "user" | "assistant";
 interface ChatHistoryMessage {
@@ -35,6 +43,9 @@ export class ProcessingHelper {
 	private readonly MAX_CHAT_HISTORY_MESSAGES = 30;
 	private readonly MAX_CHAT_MESSAGE_CHARS = 8000;
 	private readonly MAX_MEMORY_CONTEXT_CHARS = 12000;
+	private cachedProfile: { static: string[]; dynamic: string[] } | null = null;
+	private cachedProfileAt = 0;
+	private readonly PROFILE_CACHE_MS = 10 * 60 * 1000;
 
 	constructor(appState: AppState) {
 		this.appState = appState;
@@ -46,8 +57,15 @@ export class ProcessingHelper {
 		}
 
 		// Get text model from environment (default to gpt-oss-20b)
-		const textModel = (process.env.GROQ_TEXT_MODEL ||
-			"openai/gpt-oss-20b") as TextModel;
+		const rawTextModel = process.env.GROQ_TEXT_MODEL;
+		const allowedTextModels: TextModel[] = [
+			"auto",
+			"openai/gpt-oss-20b",
+			"openai/gpt-oss-120b",
+		];
+		const textModel: TextModel = allowedTextModels.includes(rawTextModel as TextModel)
+			? (rawTextModel as TextModel)
+			: "openai/gpt-oss-20b";
 
 		// Get vision model from environment (optional)
 		const visionModel = process.env.GROQ_VISION_MODEL;
@@ -65,12 +83,9 @@ export class ProcessingHelper {
 			const effectivePrompt = this.supermemoryHelper.getEffectiveSystemPrompt();
 			this.llmHelper.setCustomSystemPrompt(effectivePrompt);
 
-			// Sync initial context to LLMHelper (persisted About You data)
-			const additionalContext = this.supermemoryHelper.getAdditionalContext();
-			if (additionalContext) {
-				this.llmHelper.setAdditionalContext(additionalContext);
-				console.log("[ProcessingHelper] Initial context synced to LLM");
-			}
+			// Sync initial context to LLMHelper (About You + session context + cached profile when available)
+			this.syncAdditionalContextToLlm();
+			void this.getUserProfile(true);
 		} else {
 			console.log(
 				"[ProcessingHelper] Supermemory API key not found, customization features limited",
@@ -317,11 +332,23 @@ export class ProcessingHelper {
 		}
 	}
 
+	private buildRetrievalQuery(userMessage: string): string {
+		const recentUserMessages = this.chatHistory
+			.filter((m) => m.role === "user")
+			.slice(-2)
+			.map((m) => m.content.trim())
+			.filter(Boolean)
+			.map((m) => (m.length > 400 ? `${m.slice(0, 400)}…` : m));
+
+		const parts = [...recentUserMessages, userMessage.trim()].filter(Boolean);
+		return parts.join("\n\n");
+	}
+
 	public async chat(message: string): Promise<string> {
 		const trimmed = message.trim();
 		if (!trimmed) return "";
 
-		await this.prepareMemoryContext(trimmed);
+		await this.prepareMemoryContext(this.buildRetrievalQuery(trimmed));
 
 		const history = this.chatHistory.map((m) => ({
 			role: m.role,
@@ -356,29 +383,669 @@ export class ProcessingHelper {
 			return;
 		}
 
-		try {
-			console.log(`[ProcessingHelper] Searching memories for: "${query.substring(0, 50)}..."`);
-			const result = await this.supermemoryHelper.searchMemories(query);
-			if (result?.results?.length > 0) {
-				const memoryContext = result.results
-					.map((r: { memory?: string }) => r.memory || "")
-					.filter(Boolean)
-					.join("\n\n");
-				const capped =
-					memoryContext.length > this.MAX_MEMORY_CONTEXT_CHARS
-						? `${memoryContext.slice(0, this.MAX_MEMORY_CONTEXT_CHARS)}\n\n...[truncated]`
-						: memoryContext;
-				this.llmHelper.setMemoryContext(capped);
-				console.log(`[ProcessingHelper] Memory context set from ${result.results.length} results (${memoryContext.length} chars)`);
-			} else {
-				this.llmHelper.setMemoryContext("");
-				console.log("[ProcessingHelper] No relevant memories found");
-			}
-		} catch (error) {
+			try {
+				console.log(
+					`[ProcessingHelper] Searching memories for: "${query.substring(0, 50)}..."`,
+				);
+
+				const uploadedDocs = this.supermemoryHelper.getDocuments();
+				const hasUploadedDocs = uploadedDocs.length > 0;
+				const aboutYouIds = new Set(
+					this.supermemoryHelper
+						.getAboutYouEntries()
+						.map((entry) => entry.supermemoryId)
+						.filter(
+							(id): id is string =>
+								typeof id === "string" && id.trim().length > 0,
+						),
+				);
+				const containerTag = this.supermemoryHelper.getDefaultContainerTag();
+
+			const attempts: Array<{
+				name: string;
+				options: Parameters<typeof this.supermemoryHelper.searchMemories>[1];
+			}> = [
+				{
+					name: "fast",
+					options: {
+						limit: 5,
+						threshold: 0.6,
+						rerank: false,
+						rewriteQuery: false,
+						include: { documents: true, summaries: true },
+					},
+				},
+					{
+						name: "expanded",
+						options: {
+							limit: 8,
+							threshold: 0.45,
+							rerank: true,
+							rewriteQuery: true,
+							include: { documents: true, summaries: true },
+						},
+					},
+				];
+				attempts.push({
+					name: "expanded-no-container",
+					options: {
+						limit: 8,
+						threshold: 0.35,
+						rerank: true,
+						rewriteQuery: true,
+						include: { documents: true, summaries: true },
+						containerTag: null,
+					},
+				});
+
+			let result:
+				| Awaited<ReturnType<typeof this.supermemoryHelper.searchMemories>>
+				| null = null;
+
+				for (const attempt of attempts) {
+					result = await this.supermemoryHelper.searchMemories(query, attempt.options);
+					if (result?.results?.length) {
+						console.log(
+							`[ProcessingHelper] Memory search success (${attempt.name}): ${result.results.length} results`,
+						);
+						break;
+					}
+					console.log(`[ProcessingHelper] Memory search empty (${attempt.name})`);
+				}
+
+				const instruction =
+					"Use the following knowledge base materials to answer the user's question. Prefer quoting or paraphrasing the most relevant excerpt(s) and reference the document titles. Some results include document summaries—use them when they help. If you used the knowledge base, include a short Sources section listing the document titles you relied on (do not invent sources). If the answer is not present, say you couldn't find it in the knowledge base and ask for the exact document name or a few keywords to search for.";
+
+					if (result?.results?.length) {
+						const MAX_DOC_SUMMARY_CHARS = 900;
+						const MAX_EXCERPT_CHARS = 700;
+						const MAX_GROUPS = 5;
+						const MAX_EXCERPTS_PER_GROUP = 4;
+					const MAX_SUMMARY_GROUPS = 3;
+
+					const clamp = (text: string, maxChars: number): string => {
+						const trimmed = text.trim();
+						if (trimmed.length <= maxChars) return trimmed;
+						return `${trimmed.slice(0, maxChars)}…`;
+					};
+
+					type DocGroup = {
+						key: string;
+						title: string;
+						summary: string;
+						bestSimilarity: number | null;
+						excerpts: Array<{ similarity: number | null; text: string }>;
+						seen: Set<string>;
+					};
+
+					const groups = new Map<string, DocGroup>();
+
+					for (const item of result.results) {
+						const resultId = typeof item.id === "string" ? item.id : "";
+						const memory = typeof item.memory === "string" ? item.memory.trim() : "";
+						const context =
+							typeof item.context === "string" ? item.context.trim() : "";
+						const excerpt =
+							context && context.length >= memory.length ? context : memory;
+						if (!excerpt) continue;
+
+						const similarity =
+							typeof item.similarity === "number" && Number.isFinite(item.similarity)
+								? item.similarity
+								: null;
+
+						const firstDoc =
+							Array.isArray(item.documents) && item.documents.length > 0
+								? item.documents[0]
+								: null;
+
+						const docId =
+							firstDoc && typeof firstDoc.id === "string" && firstDoc.id.trim()
+								? firstDoc.id.trim()
+								: resultId || `snippet_${groups.size}`;
+
+						const docMetadata =
+							firstDoc?.metadata &&
+							typeof firstDoc.metadata === "object" &&
+							!Array.isArray(firstDoc.metadata)
+								? (firstDoc.metadata as Record<string, unknown>)
+								: null;
+						const resultMetadata =
+							item.metadata &&
+							typeof item.metadata === "object" &&
+							!Array.isArray(item.metadata)
+								? (item.metadata as Record<string, unknown>)
+								: null;
+
+						const titleFromDoc =
+							typeof firstDoc?.title === "string" ? firstDoc.title.trim() : "";
+						const titleFromDocFilename =
+							typeof docMetadata?.filename === "string"
+								? docMetadata.filename.trim()
+								: "";
+						const titleFromResult =
+							typeof item.title === "string" ? item.title.trim() : "";
+						const titleFromResultFilename =
+							typeof resultMetadata?.filename === "string"
+								? resultMetadata.filename.trim()
+								: "";
+
+						const title =
+							titleFromDoc ||
+							titleFromDocFilename ||
+							titleFromResult ||
+							titleFromResultFilename ||
+							"Knowledge snippet";
+
+						const summary =
+							typeof firstDoc?.summary === "string" ? firstDoc.summary.trim() : "";
+
+						const existing = groups.get(docId);
+						const group: DocGroup =
+							existing ?? {
+								key: docId,
+								title,
+								summary,
+								bestSimilarity: similarity,
+								excerpts: [],
+								seen: new Set<string>(),
+							};
+
+						if (!existing) groups.set(docId, group);
+						if (!group.title && title) group.title = title;
+						if (!group.summary && summary) group.summary = summary;
+						if (similarity !== null) {
+							group.bestSimilarity =
+								group.bestSimilarity === null
+									? similarity
+									: Math.max(group.bestSimilarity, similarity);
+						}
+
+						const clampedExcerpt = clamp(excerpt, MAX_EXCERPT_CHARS);
+						if (group.seen.has(clampedExcerpt)) continue;
+						group.seen.add(clampedExcerpt);
+						group.excerpts.push({ similarity, text: clampedExcerpt });
+					}
+
+					const sortedGroups = Array.from(groups.values()).sort((a, b) => {
+						const aScore = a.bestSimilarity ?? -1;
+						const bScore = b.bestSimilarity ?? -1;
+						return bScore - aScore;
+					});
+
+					let summariesIncluded = 0;
+					const blocks: string[] = [];
+					for (const group of sortedGroups.slice(0, MAX_GROUPS)) {
+						const headerParts = [group.title];
+						if (group.bestSimilarity !== null) {
+							headerParts.push(`best ${group.bestSimilarity.toFixed(2)}`);
+						}
+						const lines: string[] = [];
+						lines.push(`### ${headerParts.join(" — ")}`);
+						if (group.summary && summariesIncluded < MAX_SUMMARY_GROUPS) {
+							summariesIncluded += 1;
+							lines.push(`Summary: ${clamp(group.summary, MAX_DOC_SUMMARY_CHARS)}`);
+						}
+						for (const excerpt of group.excerpts.slice(0, MAX_EXCERPTS_PER_GROUP)) {
+							const sim =
+								excerpt.similarity !== null
+									? excerpt.similarity.toFixed(2)
+									: "";
+							lines.push(`${sim ? `- (${sim}) ` : "- "}${excerpt.text}`);
+						}
+						blocks.push(lines.join("\n"));
+					}
+
+					const memoryContext = blocks.join("\n\n");
+
+				const combinedMemory = `${instruction}\n\n${memoryContext}`.trim();
+				const cappedMemory =
+					combinedMemory.length > this.MAX_MEMORY_CONTEXT_CHARS
+						? `${combinedMemory.slice(0, this.MAX_MEMORY_CONTEXT_CHARS)}\n\n...[truncated]`
+						: combinedMemory;
+
+					const searchableQuery = query.trim();
+					const queryLooksSearchable =
+						searchableQuery.length >= 4 && /[a-z0-9]/i.test(searchableQuery);
+					const queryHintsDocuments =
+						/\b(document|documents|doc|pdf|file|files|upload|uploaded|knowledge base|kb|policy|contract|agreement|spec|specification|notes)\b/i.test(
+							searchableQuery,
+						);
+
+					const bestSimilarity =
+						typeof result.results[0]?.similarity === "number" &&
+						Number.isFinite(result.results[0].similarity)
+							? result.results[0].similarity
+							: null;
+					const hasDocSummaries = result.results.some(
+						(r) =>
+							Array.isArray(r.documents) &&
+							typeof r.documents?.[0]?.summary === "string" &&
+							!!r.documents[0].summary?.trim(),
+					);
+					const hasUploadedOrIntegratedDocs =
+						hasUploadedDocs || hasDocSummaries || queryHintsDocuments;
+
+					let usedDocumentsSearch = false;
+					let cappedPreferred = cappedMemory;
+
+					if (
+						queryLooksSearchable &&
+						hasUploadedOrIntegratedDocs &&
+						(queryHintsDocuments || hasDocSummaries || bestSimilarity === null || bestSimilarity < 0.62)
+					) {
+						try {
+							const docAttempts: Array<{
+								name: string;
+								options: Parameters<typeof this.supermemoryHelper.searchDocuments>[1];
+							}> = [
+								{
+									name: "docs",
+									options: {
+										limit: 4,
+										documentThreshold: 0.55,
+										chunkThreshold: 0.65,
+										rewriteQuery: true,
+										rerank: true,
+										includeSummary: true,
+										onlyMatchingChunks: true,
+									},
+								},
+							];
+
+							if (hasUploadedDocs) {
+								docAttempts.push({
+									name: "docs-no-container",
+									options: {
+										limit: 4,
+										documentThreshold: 0.5,
+										chunkThreshold: 0.6,
+										rewriteQuery: true,
+										rerank: true,
+										includeSummary: true,
+										onlyMatchingChunks: true,
+										containerTags: null,
+									},
+								});
+							}
+
+							let docsResult:
+								| Awaited<ReturnType<typeof this.supermemoryHelper.searchDocuments>>
+								| null = null;
+							for (const attempt of docAttempts) {
+								docsResult = await this.supermemoryHelper.searchDocuments(
+									searchableQuery,
+									attempt.options,
+								);
+								const filtered = docsResult.results.filter((doc) => {
+									if (aboutYouIds.has(doc.documentId)) return false;
+									const meta =
+										doc.metadata &&
+										typeof doc.metadata === "object" &&
+										!Array.isArray(doc.metadata)
+											? (doc.metadata as Record<string, unknown>)
+											: {};
+									const source = typeof meta.source === "string" ? meta.source : "";
+									const type = typeof meta.type === "string" ? meta.type : "";
+									if (source === "about_you" || type === "about_you") return false;
+									if (type === "text_context") return false;
+									return true;
+								});
+								docsResult = { ...docsResult, results: filtered };
+
+								if (docsResult.results.length > 0) {
+									console.log(
+										`[ProcessingHelper] Document search success (${attempt.name}): ${docsResult.results.length} results`,
+									);
+									break;
+								}
+								console.log(
+									`[ProcessingHelper] Document search empty (${attempt.name})`,
+								);
+							}
+
+							if (docsResult?.results?.length) {
+								const MAX_DOCS = 4;
+								const MAX_CHUNKS_PER_DOC = 4;
+								const MAX_DOC_SUMMARY_CHARS = 900;
+								const MAX_CHUNK_CHARS = 900;
+
+								const clamp = (text: string, maxChars: number): string => {
+									const trimmed = text.trim();
+									if (trimmed.length <= maxChars) return trimmed;
+									return `${trimmed.slice(0, maxChars)}…`;
+								};
+
+								const blocks: string[] = [];
+								for (const doc of docsResult.results.slice(0, MAX_DOCS)) {
+									const meta =
+										doc.metadata &&
+										typeof doc.metadata === "object" &&
+										!Array.isArray(doc.metadata)
+											? (doc.metadata as Record<string, unknown>)
+											: {};
+									const filename =
+										typeof meta.filename === "string" ? meta.filename.trim() : "";
+									const title =
+										(typeof doc.title === "string" && doc.title.trim()) ||
+										filename ||
+										doc.documentId;
+									const score =
+										typeof doc.score === "number" && Number.isFinite(doc.score)
+											? doc.score
+											: null;
+
+									const lines: string[] = [];
+									lines.push(
+										`### ${[title, score !== null ? `score ${score.toFixed(2)}` : ""]
+											.filter(Boolean)
+											.join(" — ")}`,
+									);
+
+									const summary =
+										typeof doc.summary === "string" ? doc.summary.trim() : "";
+									if (summary) {
+										lines.push(`Summary: ${clamp(summary, MAX_DOC_SUMMARY_CHARS)}`);
+									}
+
+									const chunks = Array.isArray(doc.chunks) ? doc.chunks : [];
+									for (const chunk of chunks.slice(0, MAX_CHUNKS_PER_DOC)) {
+										const content =
+											typeof chunk.content === "string" ? chunk.content.trim() : "";
+										if (!content) continue;
+										const chunkScore =
+											typeof chunk.score === "number" &&
+											Number.isFinite(chunk.score)
+												? chunk.score
+												: null;
+										lines.push(
+											`${chunkScore !== null ? `- (${chunkScore.toFixed(2)}) ` : "- "}${clamp(content, MAX_CHUNK_CHARS)}`,
+										);
+									}
+
+									blocks.push(lines.join("\n"));
+								}
+
+								const docsContext = blocks.join("\n\n").trim();
+								const combinedDocs = `${instruction}\n\n${docsContext}`.trim();
+								const cappedDocs =
+									combinedDocs.length > this.MAX_MEMORY_CONTEXT_CHARS
+										? `${combinedDocs.slice(0, this.MAX_MEMORY_CONTEXT_CHARS)}\n\n...[truncated]`
+										: combinedDocs;
+
+								cappedPreferred =
+									!queryHintsDocuments && cappedDocs.length < cappedMemory.length
+										? cappedMemory
+										: cappedDocs;
+								usedDocumentsSearch = cappedPreferred === cappedDocs;
+
+								if (
+									usedDocumentsSearch &&
+									docsContext &&
+									cappedPreferred.length < this.MAX_MEMORY_CONTEXT_CHARS * 0.7 &&
+									memoryContext
+								) {
+									const extraBudget = this.MAX_MEMORY_CONTEXT_CHARS - cappedPreferred.length;
+									const extra = memoryContext.slice(0, Math.max(0, extraBudget - 80));
+									if (extra.trim()) {
+										cappedPreferred = `${cappedPreferred}\n\n---\n\nAdditional excerpts:\n${extra}`.trim();
+									}
+								}
+							}
+						} catch (error) {
+							console.warn(
+								"[ProcessingHelper] Document search fallback failed:",
+								error,
+							);
+						}
+					}
+
+					this.llmHelper.setMemoryContext(cappedPreferred);
+					console.log(
+						`[ProcessingHelper] Memory context set from ${result.results.length} results (${combinedMemory.length} chars)${usedDocumentsSearch ? " + docs search" : ""}`,
+					);
+				} else {
+					const searchableQuery = query.trim();
+					const queryLooksSearchable =
+						searchableQuery.length >= 4 && /[a-z0-9]/i.test(searchableQuery);
+
+					if (queryLooksSearchable) {
+						try {
+							const docsResult = await this.supermemoryHelper.searchDocuments(
+								searchableQuery,
+								{
+									limit: 4,
+									documentThreshold: 0.5,
+									chunkThreshold: 0.6,
+									rewriteQuery: true,
+									rerank: true,
+									includeSummary: true,
+									onlyMatchingChunks: true,
+								},
+							);
+							const filtered = docsResult.results.filter((doc) => {
+								if (aboutYouIds.has(doc.documentId)) return false;
+								const meta =
+									doc.metadata &&
+									typeof doc.metadata === "object" &&
+									!Array.isArray(doc.metadata)
+										? (doc.metadata as Record<string, unknown>)
+										: {};
+								const source = typeof meta.source === "string" ? meta.source : "";
+								const type = typeof meta.type === "string" ? meta.type : "";
+								if (source === "about_you" || type === "about_you") return false;
+								if (type === "text_context") return false;
+								return true;
+							});
+
+							if (filtered.length > 0) {
+								const MAX_DOCS = 4;
+								const MAX_CHUNKS_PER_DOC = 4;
+								const MAX_DOC_SUMMARY_CHARS = 900;
+								const MAX_CHUNK_CHARS = 900;
+
+								const clamp = (text: string, maxChars: number): string => {
+									const trimmed = text.trim();
+									if (trimmed.length <= maxChars) return trimmed;
+									return `${trimmed.slice(0, maxChars)}…`;
+								};
+
+								const blocks: string[] = [];
+								for (const doc of filtered.slice(0, MAX_DOCS)) {
+									const meta =
+										doc.metadata &&
+										typeof doc.metadata === "object" &&
+										!Array.isArray(doc.metadata)
+											? (doc.metadata as Record<string, unknown>)
+											: {};
+									const filename =
+										typeof meta.filename === "string" ? meta.filename.trim() : "";
+									const title =
+										(typeof doc.title === "string" && doc.title.trim()) ||
+										filename ||
+										doc.documentId;
+									const score =
+										typeof doc.score === "number" && Number.isFinite(doc.score)
+											? doc.score
+											: null;
+									const lines: string[] = [];
+									lines.push(
+										`### ${[title, score !== null ? `score ${score.toFixed(2)}` : ""]
+											.filter(Boolean)
+											.join(" — ")}`,
+									);
+
+									const summary =
+										typeof doc.summary === "string" ? doc.summary.trim() : "";
+									if (summary) {
+										lines.push(`Summary: ${clamp(summary, MAX_DOC_SUMMARY_CHARS)}`);
+									}
+									const chunks = Array.isArray(doc.chunks) ? doc.chunks : [];
+									for (const chunk of chunks.slice(0, MAX_CHUNKS_PER_DOC)) {
+										const content =
+											typeof chunk.content === "string" ? chunk.content.trim() : "";
+										if (!content) continue;
+										const chunkScore =
+											typeof chunk.score === "number" &&
+											Number.isFinite(chunk.score)
+												? chunk.score
+												: null;
+										lines.push(
+											`${chunkScore !== null ? `- (${chunkScore.toFixed(2)}) ` : "- "}${clamp(content, MAX_CHUNK_CHARS)}`,
+										);
+									}
+									blocks.push(lines.join("\n"));
+								}
+
+								const docsContext = blocks.join("\n\n").trim();
+								const combinedDocs = `${instruction}\n\n${docsContext}`.trim();
+								const cappedDocs =
+									combinedDocs.length > this.MAX_MEMORY_CONTEXT_CHARS
+										? `${combinedDocs.slice(0, this.MAX_MEMORY_CONTEXT_CHARS)}\n\n...[truncated]`
+										: combinedDocs;
+								this.llmHelper.setMemoryContext(cappedDocs);
+								console.log(
+									`[ProcessingHelper] Memory context set from document search fallback (${filtered.length} docs)`,
+								);
+								return;
+							}
+						} catch (error) {
+							console.warn(
+								"[ProcessingHelper] Document search fallback (no mem hits) failed:",
+								error,
+							);
+						}
+					}
+
+					try {
+						const processing = await this.supermemoryHelper.getProcessingDocuments();
+						const docNameById = new Map(
+							uploadedDocs.map((d) => [d.id, d.name] as const),
+						);
+
+						const processingForContainer = processing.documents.filter((doc) => {
+							if (Array.isArray(doc.containerTags)) {
+								return (
+									!aboutYouIds.has(doc.id) &&
+									doc.containerTags.includes(containerTag)
+								);
+							}
+							if (aboutYouIds.has(doc.id)) return false;
+							return hasUploadedDocs ? docNameById.has(doc.id) : false;
+						});
+
+						if (processingForContainer.length > 0) {
+							const names = processingForContainer
+								.map((doc) => docNameById.get(doc.id) || doc.title || doc.id)
+								.slice(0, 5)
+								.join(", ");
+							const extra =
+								processingForContainer.length > 5
+									? ` (+${processingForContainer.length - 5} more)`
+									: "";
+
+							this.llmHelper.setMemoryContext(
+								`No relevant memories were found yet. Your knowledge base may still be processing, so it might not be searchable right now. Processing: ${names}${extra}. Ask again in a minute, or include specific keywords from the document.`,
+							);
+								console.log(
+									`[ProcessingHelper] Documents still processing (${processingForContainer.length}); memory context set to processing notice`,
+								);
+								return;
+							}
+						} catch (error) {
+						console.warn(
+							"[ProcessingHelper] Unable to check processing documents:",
+							error,
+						);
+					}
+
+					try {
+						const listed = await this.supermemoryHelper.listDocuments({
+							limit: 20,
+							page: 1,
+							order: "desc",
+							sort: "updatedAt",
+						});
+						const readyDocs = listed.memories.filter((doc) => {
+							if (!doc || doc.status !== "done") return false;
+							if (aboutYouIds.has(doc.id)) return false;
+							const meta = (doc.metadata ?? {}) as Record<string, unknown>;
+							const source = typeof meta.source === "string" ? meta.source : "";
+							const type = typeof meta.type === "string" ? meta.type : "";
+							if (source === "about_you" || type === "about_you") return false;
+							if (type === "text_context") return false;
+							return true;
+						});
+						if (readyDocs.length > 0) {
+							const docLabels = readyDocs
+								.slice(0, 8)
+								.map((doc) => {
+									const title = typeof doc.title === "string" ? doc.title.trim() : "";
+									if (title) return title;
+									const meta = (doc.metadata ?? {}) as Record<string, unknown>;
+									const filename =
+										typeof meta.filename === "string" ? meta.filename : "";
+									return filename || doc.id;
+								})
+								.filter(Boolean)
+								.join(", ");
+							const extra = readyDocs.length > 8 ? ` (+${readyDocs.length - 8} more)` : "";
+
+							this.llmHelper.setMemoryContext(
+								`No directly relevant snippets were found for this question. Available knowledge base documents: ${docLabels}${extra}. Ask the user which document to use, or ask them to provide 3–5 keywords or an exact quote from the document to search.`,
+							);
+							console.log(
+								`[ProcessingHelper] No matches; provided ready-doc list (${readyDocs.length}) to guide follow-up`,
+							);
+							return;
+						}
+					} catch (error) {
+						console.warn(
+							"[ProcessingHelper] Unable to list documents for fallback:",
+							error,
+						);
+					}
+
+					this.llmHelper.setMemoryContext("");
+					console.log("[ProcessingHelper] No relevant memories found");
+				}
+			} catch (error) {
 			console.error("[ProcessingHelper] Error preparing memory context:", error);
 			this.llmHelper.setMemoryContext("");
 			// Don't throw - continue without memory context
 		}
+	}
+
+	private formatProfileForPrompt(profile: { static: string[]; dynamic: string[] }): string {
+		const staticItems = (profile.static || []).filter(Boolean).slice(0, 12);
+		const dynamicItems = (profile.dynamic || []).filter(Boolean).slice(0, 12);
+		if (staticItems.length === 0 && dynamicItems.length === 0) return "";
+
+		const lines: string[] = [];
+		lines.push("User Preferences (from profile):");
+		if (staticItems.length > 0) {
+			lines.push("Static:");
+			for (const item of staticItems) lines.push(`- ${item}`);
+		}
+		if (dynamicItems.length > 0) {
+			lines.push("Dynamic:");
+			for (const item of dynamicItems) lines.push(`- ${item}`);
+		}
+		return lines.join("\n");
+	}
+
+	private syncAdditionalContextToLlm(): void {
+		if (!this.supermemoryHelper) {
+			this.llmHelper.setAdditionalContext("");
+			return;
+		}
+
+		const base = this.supermemoryHelper.getAdditionalContext();
+		const profileBlock = this.cachedProfile
+			? this.formatProfileForPrompt(this.cachedProfile)
+			: "";
+		const combined = [base, profileBlock].filter(Boolean).join("\n\n---\n\n");
+		this.llmHelper.setAdditionalContext(combined);
 	}
 
 	public getLLMHelper() {
@@ -417,9 +1084,7 @@ export class ProcessingHelper {
 			return false;
 		}
 		this.supermemoryHelper.setTextContext(text);
-		// Sync to LLMHelper
-		const additionalContext = this.supermemoryHelper.getAdditionalContext();
-		this.llmHelper.setAdditionalContext(additionalContext);
+		this.syncAdditionalContextToLlm();
 		return true;
 	}
 
@@ -429,9 +1094,7 @@ export class ProcessingHelper {
 			return false;
 		}
 		this.supermemoryHelper.setUserFacts(facts);
-		// Sync to LLMHelper
-		const additionalContext = this.supermemoryHelper.getAdditionalContext();
-		this.llmHelper.setAdditionalContext(additionalContext);
+		this.syncAdditionalContextToLlm();
 		return true;
 	}
 
@@ -537,20 +1200,173 @@ export class ProcessingHelper {
 		return this.supermemoryHelper?.getDocuments() || [];
 	}
 
-	public async getUserProfile(): Promise<{
+	public async getUserProfile(forceRefresh = false): Promise<{
 		static: string[];
 		dynamic: string[];
 	} | null> {
-		if (!this.supermemoryHelper) {
-			return null;
+		if (!this.supermemoryHelper) return null;
+
+		if (
+			!forceRefresh &&
+			this.cachedProfile &&
+			Date.now() - this.cachedProfileAt < this.PROFILE_CACHE_MS
+		) {
+			return this.cachedProfile;
 		}
+
 		try {
 			const result = await this.supermemoryHelper.getProfile();
+			this.cachedProfile = result.profile;
+			this.cachedProfileAt = Date.now();
+			this.syncAdditionalContextToLlm();
 			return result.profile;
 		} catch (error) {
 			console.error("[ProcessingHelper] Error getting user profile:", error);
-			return null;
+			return this.cachedProfile;
 		}
+	}
+
+	// ==================== Knowledge Base / Connections ====================
+
+		public async getKnowledgeBaseOverview(options?: {
+			list?: ListDocumentsOptions;
+		}): Promise<
+		| {
+				ready: ListedDocument[];
+				processing: Array<{
+					id: string;
+					status: string;
+					title?: string | null;
+				}>;
+				list: ListDocumentsResponse;
+		  }
+		| null
+		> {
+			if (!this.supermemoryHelper) return null;
+
+			const containerTag = this.supermemoryHelper.getDefaultContainerTag();
+			const aboutYouIds = new Set(
+				this.supermemoryHelper
+					.getAboutYouEntries()
+					.map((entry) => entry.supermemoryId)
+					.filter((id): id is string => typeof id === "string" && id.trim().length > 0),
+			);
+			const [list, processing] = await Promise.all([
+				this.supermemoryHelper.listDocuments(options?.list),
+				this.supermemoryHelper.getProcessingDocuments(),
+			]);
+
+			const ready = list.memories.filter((doc) => {
+				if (!doc || doc.status !== "done") return false;
+				if (aboutYouIds.has(doc.id)) return false;
+				const meta = (doc.metadata ?? {}) as Record<string, unknown>;
+				const source = typeof meta.source === "string" ? meta.source : "";
+				const type = typeof meta.type === "string" ? meta.type : "";
+				if (source === "about_you" || type === "about_you") return false;
+				if (type === "text_context") return false;
+				return true;
+			});
+			const processingForContainer = processing.documents
+				.filter(
+					(doc) =>
+						!aboutYouIds.has(doc.id) &&
+						Array.isArray(doc.containerTags) &&
+						doc.containerTags.includes(containerTag),
+				)
+				.map((doc) => ({
+					id: doc.id,
+					status: doc.status,
+					title: doc.title ?? null,
+			}));
+
+		return {
+			ready,
+			processing: processingForContainer,
+			list,
+		};
+	}
+
+	public async addKnowledgeUrl(params: {
+		url: string;
+		title?: string;
+	}): Promise<{ id: string; status: string } | null> {
+		if (!this.supermemoryHelper) return null;
+		const url = params.url.trim();
+		if (!url) throw new Error("URL is required");
+
+		const customId = this.supermemoryHelper.createStableCustomId("kb_url", url);
+		return await this.supermemoryHelper.addMemory({
+			content: url,
+			customId,
+			metadata: {
+				type: "knowledge_url",
+				source: "url",
+				...(params.title ? { title: params.title } : {}),
+			},
+		});
+	}
+
+	public async addKnowledgeText(params: {
+		title: string;
+		content: string;
+	}): Promise<{ id: string; status: string } | null> {
+		if (!this.supermemoryHelper) return null;
+		const title = params.title.trim();
+		const content = params.content.trim();
+		if (!title) throw new Error("Title is required");
+		if (!content) throw new Error("Content is required");
+
+		const customId = this.supermemoryHelper.createStableCustomId(
+			"kb_note",
+			title.toLowerCase(),
+		);
+		return await this.supermemoryHelper.addMemory({
+			content,
+			customId,
+			metadata: {
+				type: "knowledge_note",
+				source: "note",
+				title,
+			},
+		});
+	}
+
+	public async listConnections(): Promise<SupermemoryConnection[] | null> {
+		if (!this.supermemoryHelper) return null;
+		return await this.supermemoryHelper.listConnections();
+	}
+
+	public async createConnection(
+		provider: SupermemoryProvider,
+		params?: {
+			documentLimit?: number;
+			metadata?: Record<string, string | number | boolean>;
+			redirectUrl?: string;
+		},
+	): Promise<CreateConnectionResponse | null> {
+		if (!this.supermemoryHelper) return null;
+		return await this.supermemoryHelper.createConnection(provider, params);
+	}
+
+	public async syncConnection(
+		provider: SupermemoryProvider,
+	): Promise<{ message: string } | null> {
+		if (!this.supermemoryHelper) return null;
+		return await this.supermemoryHelper.syncConnection(provider);
+	}
+
+	public async deleteConnection(
+		provider: SupermemoryProvider,
+	): Promise<DeleteConnectionResponse | null> {
+		if (!this.supermemoryHelper) return null;
+		return await this.supermemoryHelper.deleteConnection(provider);
+	}
+
+	public async listConnectionDocuments(
+		provider: SupermemoryProvider,
+	): Promise<ConnectionDocument[] | null> {
+		if (!this.supermemoryHelper) return null;
+		return await this.supermemoryHelper.listConnectionDocuments(provider);
 	}
 
 	public resetCustomization(): void {
@@ -560,9 +1376,7 @@ export class ProcessingHelper {
 			// Re-apply persisted About You context (preserved by reset()).
 			const effectivePrompt = this.supermemoryHelper.getEffectiveSystemPrompt();
 			this.llmHelper.setCustomSystemPrompt(effectivePrompt);
-			this.llmHelper.setAdditionalContext(
-				this.supermemoryHelper.getAdditionalContext(),
-			);
+			this.syncAdditionalContextToLlm();
 		}
 	}
 
@@ -582,9 +1396,7 @@ export class ProcessingHelper {
 		}
 		try {
 			const entry = await this.supermemoryHelper.addAboutYouTextEntry(title, content);
-			// Sync to LLMHelper
-			const additionalContext = this.supermemoryHelper.getAdditionalContext();
-			this.llmHelper.setAdditionalContext(additionalContext);
+			this.syncAdditionalContextToLlm();
 			return entry;
 		} catch (error) {
 			console.error("[ProcessingHelper] Error adding About You text entry:", error);
@@ -602,9 +1414,7 @@ export class ProcessingHelper {
 		}
 		try {
 			const entry = await this.supermemoryHelper.addAboutYouFileEntry(title, filePath);
-			// Sync to LLMHelper
-			const additionalContext = this.supermemoryHelper.getAdditionalContext();
-			this.llmHelper.setAdditionalContext(additionalContext);
+			this.syncAdditionalContextToLlm();
 			return entry;
 		} catch (error) {
 			console.error("[ProcessingHelper] Error adding About You file entry:", error);
@@ -629,9 +1439,7 @@ export class ProcessingHelper {
 				data,
 				mimeType,
 			);
-			// Sync to LLMHelper
-			const additionalContext = this.supermemoryHelper.getAdditionalContext();
-			this.llmHelper.setAdditionalContext(additionalContext);
+			this.syncAdditionalContextToLlm();
 			return entry;
 		} catch (error) {
 			console.error(
@@ -653,9 +1461,7 @@ export class ProcessingHelper {
 		}
 		try {
 			const entry = await this.supermemoryHelper.updateAboutYouEntry(id, title, content);
-			// Sync to LLMHelper
-			const additionalContext = this.supermemoryHelper.getAdditionalContext();
-			this.llmHelper.setAdditionalContext(additionalContext);
+			this.syncAdditionalContextToLlm();
 			return entry;
 		} catch (error) {
 			console.error("[ProcessingHelper] Error updating About You entry:", error);
@@ -669,9 +1475,7 @@ export class ProcessingHelper {
 		}
 		try {
 			await this.supermemoryHelper.deleteAboutYouEntry(id);
-			// Sync to LLMHelper
-			const additionalContext = this.supermemoryHelper.getAdditionalContext();
-			this.llmHelper.setAdditionalContext(additionalContext);
+			this.syncAdditionalContextToLlm();
 			return true;
 		} catch (error) {
 			console.error("[ProcessingHelper] Error deleting About You entry:", error);
@@ -690,6 +1494,8 @@ export class ProcessingHelper {
 			await this.deleteLocalCustomizationFiles();
 			this.llmHelper.resetCustomization();
 			this.resetConversation();
+			this.cachedProfile = null;
+			this.cachedProfileAt = 0;
 			console.log("[ProcessingHelper] Full reset completed");
 		}
 	}

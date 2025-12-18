@@ -86,7 +86,7 @@ interface SolutionResponse {
 	};
 }
 
-type TextModel = "openai/gpt-oss-20b" | "openai/gpt-oss-120b";
+type TextModel = "auto" | "openai/gpt-oss-20b" | "openai/gpt-oss-120b";
 
 export class LLMHelper {
 	private apiKey: string;
@@ -94,12 +94,59 @@ export class LLMHelper {
 	private readonly visionModel: string;
 	private readonly apiUrl = "https://api.groq.com/openai/v1/chat/completions";
 	private readonly defaultSystemPrompt =
-		`You are Wingman AI, a helpful, proactive assistant for any kind of problem or situation (not just coding). For any user input, analyze the situation, provide a clear problem statement, relevant context, and suggest several possible responses or actions the user could take next. Always explain your reasoning. Present your suggestions as a list of options or next steps.`;
+		`You are Wingman, a highly capable, proactive assistant for any kind of problem or situation (not just coding).
+
+Core behavior:
+- Infer what the user is trying to accomplish. If unclear, ask 1–3 precise clarifying questions.
+- Provide the best possible answer with strong structure and high signal.
+- Use any provided knowledge-base excerpts as the source of truth. If the answer is not supported by those excerpts, say so and suggest what to search for next.
+- When you rely on knowledge-base excerpts, include a short Sources section listing the document titles you used (do not invent sources).
+- Respect the user's stated preferences and style.
+- Be transparent about uncertainty and never fabricate quotes, citations, or facts.
+
+Response style:
+- Be concise but thorough; prioritize actionable steps.
+- When helpful, include a short rationale (avoid long, step-by-step internal reasoning).`;
 
 	// Dynamic customization fields
 	private customSystemPrompt = "";
 	private additionalContext = "";
 	private memoryContext = "";
+
+	private resolveTextModelForRequest(params?: {
+		userMessage?: string;
+		historyMessages?: number;
+		task?: "chat" | "solution" | "other";
+	}): Exclude<TextModel, "auto"> {
+		if (this.textModel !== "auto") return this.textModel;
+
+		const message = params?.userMessage?.trim() ?? "";
+		const task = params?.task ?? "other";
+		const historyMessages = params?.historyMessages ?? 0;
+		const memoryChars = this.memoryContext?.length ?? 0;
+
+		let score = 0;
+		if (task === "solution") score += 3;
+		if (memoryChars > 0) score += 2;
+		if (memoryChars > 2500) score += 1;
+		if (historyMessages >= 10) score += 1;
+		if (message.length > 400) score += 1;
+		if (message.length > 1200) score += 1;
+
+		if (
+			/\b(debug|refactor|architecture|design|strategy|negotiate|contract|agreement|policy|analy[sz]e|compare|trade-?offs|write code|implement|test plan|root cause)\b/i.test(
+				message,
+			)
+		) {
+			score += 2;
+		}
+
+		if (/^(hi|hello|thanks|thank you|ok|okay|cool)\b/i.test(message)) {
+			score = Math.max(0, score - 2);
+		}
+
+		return score >= 4 ? "openai/gpt-oss-120b" : "openai/gpt-oss-20b";
+	}
 
 	constructor(apiKey: string, textModel?: TextModel, visionModel?: string) {
 		if (!apiKey) {
@@ -132,29 +179,43 @@ export class LLMHelper {
 		console.log(`[LLMHelper] Memory context set (${context.length} chars)`);
 	}
 
-	// Build the effective system prompt with all customizations
-	private buildSystemPrompt(): string {
-		console.log("[LLMHelper] Building system prompt...");
-		console.log(`[LLMHelper]   - Has custom prompt: ${!!this.customSystemPrompt}`);
-		console.log(`[LLMHelper]   - Has additional context: ${!!this.additionalContext} (${this.additionalContext.length} chars)`);
-		console.log(`[LLMHelper]   - Has memory context: ${!!this.memoryContext} (${this.memoryContext.length} chars)`);
+	private buildSystemMessages(): Array<{ role: "system"; content: string }> {
+		const messages: Array<{ role: "system"; content: string }> = [];
+		messages.push({
+			role: "system",
+			content: this.customSystemPrompt || this.defaultSystemPrompt,
+		});
 
-		// Use custom prompt if set, otherwise use default
-		let prompt = this.customSystemPrompt || this.defaultSystemPrompt;
-
-		// Append additional context if available
 		if (this.additionalContext) {
-			prompt += `\n\n--- Additional Context ---\n${this.additionalContext}`;
+			messages.push({
+				role: "system",
+				content: `User Context:\n${this.additionalContext}`,
+			});
 		}
 
-		// Append memory context if available
 		if (this.memoryContext) {
-			prompt += `\n\n--- Relevant Information from Memory ---\n${this.memoryContext}`;
-			console.log(`[LLMHelper]   - Memory context preview: "${this.memoryContext.substring(0, 100)}..."`);
+			messages.push({
+				role: "system",
+				content: `Knowledge Base Excerpts:\n${this.memoryContext}`,
+			});
 		}
 
-		console.log(`[LLMHelper]   - Total system prompt length: ${prompt.length} chars`);
-		return prompt;
+		console.log("[LLMHelper] Building system messages...");
+		console.log(`[LLMHelper]   - System messages: ${messages.length}`);
+		console.log(`[LLMHelper]   - Has custom prompt: ${!!this.customSystemPrompt}`);
+		console.log(
+			`[LLMHelper]   - Has additional context: ${!!this.additionalContext} (${this.additionalContext.length} chars)`,
+		);
+		console.log(
+			`[LLMHelper]   - Has memory context: ${!!this.memoryContext} (${this.memoryContext.length} chars)`,
+		);
+		if (this.memoryContext) {
+			console.log(
+				`[LLMHelper]   - Memory context preview: "${this.memoryContext.substring(0, 100)}..."`,
+			);
+		}
+
+		return messages;
 	}
 
 	// Reset all customizations to defaults
@@ -288,11 +349,10 @@ export class LLMHelper {
 	): Promise<ExtractedProblemInfo> {
 		try {
 			// Build content array with text and images
-			const systemPrompt = this.buildSystemPrompt();
 			const content: MessageContent[] = [
 				{
 					type: "text",
-					text: `${systemPrompt}\n\nYou are a wingman. Please analyze these images and extract the following information in JSON format:\n{
+					text: `Please analyze these images and extract the following information in JSON format:\n{
   "problem_statement": "A clear statement of the problem or situation depicted in the images.",
   "context": "Relevant background or context from the images.",
   "suggested_responses": ["First possible answer or action", "Second possible answer or action", "..."],
@@ -314,24 +374,24 @@ export class LLMHelper {
 			}
 
 			let response: string;
-			try {
-				// Prefer JSON mode when available; fall back for models/endpoints that don't support it.
-				response = await this.callGroq(
-					this.visionModel,
-					[{ role: "user", content }],
-					{ temperature: 1, responseFormat: { type: "json_object" }, signal },
-				);
-			} catch (e: unknown) {
-				const message = e instanceof Error ? e.message : String(e);
-				if (message.includes("response_format") || message.includes("json_object")) {
+				try {
+					// Prefer JSON mode when available; fall back for models/endpoints that don't support it.
 					response = await this.callGroq(
 						this.visionModel,
-						[{ role: "user", content }],
-						{ temperature: 1, signal },
+						[...this.buildSystemMessages(), { role: "user", content }],
+						{ temperature: 1, responseFormat: { type: "json_object" }, signal },
 					);
-				} else {
-					throw e;
-				}
+				} catch (e: unknown) {
+					const message = e instanceof Error ? e.message : String(e);
+					if (message.includes("response_format") || message.includes("json_object")) {
+						response = await this.callGroq(
+							this.visionModel,
+							[...this.buildSystemMessages(), { role: "user", content }],
+							{ temperature: 1, signal },
+						);
+					} else {
+						throw e;
+					}
 			}
 
 			try {
@@ -357,8 +417,7 @@ export class LLMHelper {
 		problemInfo: ProblemInfo,
 		signal?: AbortSignal,
 	): Promise<SolutionResponse> {
-		const systemPrompt = this.buildSystemPrompt();
-		const prompt = `${systemPrompt}\n\nGiven this problem or situation:\n${JSON.stringify(problemInfo, null, 2)}\n\nPlease provide your response in the following JSON format:\n{
+		const prompt = `Given this problem or situation:\n${JSON.stringify(problemInfo, null, 2)}\n\nPlease provide your response in the following JSON format:\n{
   "solution": {
     "code": "The code or main answer here.",
     "problem_statement": "Restate the problem or situation.",
@@ -370,25 +429,30 @@ export class LLMHelper {
 
 		console.log("[LLMHelper] Calling Groq for solution...");
 		try {
+			const model = this.resolveTextModelForRequest({
+				task: "solution",
+				userMessage: prompt,
+			});
+
 			let response: string;
-			try {
-				// Prefer JSON mode when available; fall back for models/endpoints that don't support it.
-				response = await this.callGroq(
-					this.textModel,
-					[{ role: "user", content: prompt }],
-					{ temperature: 0.7, responseFormat: { type: "json_object" }, signal },
-				);
-			} catch (e: unknown) {
-				const message = e instanceof Error ? e.message : String(e);
-				if (message.includes("response_format") || message.includes("json_object")) {
+				try {
+					// Prefer JSON mode when available; fall back for models/endpoints that don't support it.
 					response = await this.callGroq(
-						this.textModel,
-						[{ role: "user", content: prompt }],
-						{ temperature: 0.7, signal },
+						model,
+						[...this.buildSystemMessages(), { role: "user", content: prompt }],
+						{ temperature: 0.7, responseFormat: { type: "json_object" }, signal },
 					);
-				} else {
-					throw e;
-				}
+				} catch (e: unknown) {
+					const message = e instanceof Error ? e.message : String(e);
+					if (message.includes("response_format") || message.includes("json_object")) {
+						response = await this.callGroq(
+							model,
+							[...this.buildSystemMessages(), { role: "user", content: prompt }],
+							{ temperature: 0.7, signal },
+						);
+					} else {
+						throw e;
+					}
 			}
 			console.log("[LLMHelper] Groq returned result.");
 			try {
@@ -419,11 +483,10 @@ export class LLMHelper {
 	): Promise<SolutionResponse> {
 		try {
 			// Build content array with text and images
-			const systemPrompt = this.buildSystemPrompt();
 			const content: MessageContent[] = [
 				{
 					type: "text",
-					text: `${systemPrompt}\n\nYou are a wingman. Given:\n1. The original problem or situation: ${JSON.stringify(problemInfo, null, 2)}\n2. The current response or approach: ${currentCode}\n3. The debug information in the provided images\n\nPlease analyze the debug information and provide feedback in this JSON format:\n{
+					text: `Given:\n1. The original problem or situation: ${JSON.stringify(problemInfo, null, 2)}\n2. The current response or approach: ${currentCode}\n3. The debug information in the provided images\n\nPlease analyze the debug information and provide feedback in this JSON format:\n{
   "solution": {
     "code": "The code or main answer here.",
     "problem_statement": "Restate the problem or situation.",
@@ -448,24 +511,24 @@ export class LLMHelper {
 			}
 
 			let response: string;
-			try {
-				// Prefer JSON mode when available; fall back for models/endpoints that don't support it.
-				response = await this.callGroq(
-					this.visionModel,
-					[{ role: "user", content }],
-					{ temperature: 1, responseFormat: { type: "json_object" }, signal },
-				);
-			} catch (e: unknown) {
-				const message = e instanceof Error ? e.message : String(e);
-				if (message.includes("response_format") || message.includes("json_object")) {
+				try {
+					// Prefer JSON mode when available; fall back for models/endpoints that don't support it.
 					response = await this.callGroq(
 						this.visionModel,
-						[{ role: "user", content }],
-						{ temperature: 1, signal },
+						[...this.buildSystemMessages(), { role: "user", content }],
+						{ temperature: 1, responseFormat: { type: "json_object" }, signal },
 					);
-				} else {
-					throw e;
-				}
+				} catch (e: unknown) {
+					const message = e instanceof Error ? e.message : String(e);
+					if (message.includes("response_format") || message.includes("json_object")) {
+						response = await this.callGroq(
+							this.visionModel,
+							[...this.buildSystemMessages(), { role: "user", content }],
+							{ temperature: 1, signal },
+						);
+					} else {
+						throw e;
+					}
 			}
 
 			try {
@@ -491,12 +554,11 @@ export class LLMHelper {
 	public async analyzeImageFile(imagePath: string, signal?: AbortSignal) {
 		try {
 			const dataUrl = await this.imageToDataUrl(imagePath);
-			const systemPrompt = this.buildSystemPrompt();
 
 			const content: MessageContent[] = [
 				{
 					type: "text",
-					text: `${systemPrompt}\n\nDescribe the content of this image in a short, concise answer. In addition to your main answer, suggest several possible actions or responses the user could take next based on the image. Do not return a structured JSON object, just answer naturally as you would to a user. Be concise and brief.`,
+					text: `Describe the content of this image in a short, concise answer. In addition to your main answer, suggest several possible actions or responses the user could take next based on the image. Do not return a structured JSON object, just answer naturally as you would to a user.`,
 				},
 				{
 					type: "image_url",
@@ -508,7 +570,7 @@ export class LLMHelper {
 
 			const response = await this.callGroq(
 				this.visionModel,
-				[{ role: "user", content }],
+				[...this.buildSystemMessages(), { role: "user", content }],
 				{ temperature: 1, signal },
 			);
 
@@ -525,10 +587,8 @@ export class LLMHelper {
 		signal?: AbortSignal,
 	): Promise<string> {
 		try {
-			const systemPrompt = this.buildSystemPrompt();
-
 			const messages: Array<{ role: string; content: string }> = [
-				{ role: "system", content: systemPrompt },
+				...this.buildSystemMessages(),
 			];
 			if (history && history.length > 0) {
 				for (const m of history) {
@@ -539,7 +599,12 @@ export class LLMHelper {
 			}
 			messages.push({ role: "user", content: message });
 
-			const response = await this.callGroq(this.textModel, messages, {
+			const model = this.resolveTextModelForRequest({
+				task: "chat",
+				userMessage: message,
+				historyMessages: history?.length ?? 0,
+			});
+			const response = await this.callGroq(model, messages, {
 				temperature: 0.7,
 				signal,
 			});
@@ -559,13 +624,17 @@ export class LLMHelper {
 	}
 
 	public getAvailableModels(): string[] {
-		return ["openai/gpt-oss-20b", "openai/gpt-oss-120b"];
+		return ["auto", "openai/gpt-oss-20b", "openai/gpt-oss-120b"];
 	}
 
 	public switchModel(model: TextModel): void {
-		if (model !== "openai/gpt-oss-20b" && model !== "openai/gpt-oss-120b") {
+		if (
+			model !== "auto" &&
+			model !== "openai/gpt-oss-20b" &&
+			model !== "openai/gpt-oss-120b"
+		) {
 			throw new Error(
-				`Invalid model: ${model}. Must be openai/gpt-oss-20b or openai/gpt-oss-120b`,
+				`Invalid model: ${model}. Must be auto, openai/gpt-oss-20b, or openai/gpt-oss-120b`,
 			);
 		}
 		this.textModel = model;
@@ -575,8 +644,12 @@ export class LLMHelper {
 	public async testConnection(): Promise<{ success: boolean; error?: string }> {
 		try {
 			// Test with a simple prompt
+			const model = this.resolveTextModelForRequest({
+				task: "other",
+				userMessage: "Hello",
+			});
 			await this.callGroq(
-				this.textModel,
+				model,
 				[{ role: "user", content: "Hello" }],
 				{ temperature: 0.7 },
 			);

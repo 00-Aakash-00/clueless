@@ -1,12 +1,17 @@
 // ipcHandlers.ts
 
-import { app, ipcMain } from "electron";
+import { app, ipcMain, shell } from "electron";
 import nodePath from "node:path";
 import type { AppState } from "./main";
 
 export function initializeIpcHandlers(appState: AppState): void {
 	const PERSONALIZATION_UNAVAILABLE =
 		"Personalization unavailable (no Supermemory API key)";
+	const CONNECTION_PROVIDERS = new Set([
+		"notion",
+		"google-drive",
+		"onedrive",
+	]);
 
 	const coerceToUint8Array = (data: unknown): Uint8Array | null => {
 		if (data instanceof Uint8Array) return data;
@@ -179,9 +184,11 @@ export function initializeIpcHandlers(appState: AppState): void {
 	ipcMain.handle("switch-model", async (_, model: string) => {
 		try {
 			const llmHelper = appState.processingHelper.getLLMHelper();
-			llmHelper.switchModel(
-				model as "openai/gpt-oss-20b" | "openai/gpt-oss-120b",
-			);
+			const allowed = new Set(llmHelper.getAvailableModels());
+			if (!allowed.has(model)) {
+				return { success: false, error: "Invalid model" };
+			}
+			llmHelper.switchModel(model as never);
 			return { success: true };
 		} catch (error: unknown) {
 			console.error("Error switching model:", error);
@@ -380,7 +387,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
 	ipcMain.handle("get-user-profile", async () => {
 		try {
-			const profile = await appState.processingHelper.getUserProfile();
+			const profile = await appState.processingHelper.getUserProfile(true);
 			return profile;
 		} catch (error: unknown) {
 			console.error("Error getting user profile:", error);
@@ -396,6 +403,218 @@ export function initializeIpcHandlers(appState: AppState): void {
 			console.error("Error resetting customization:", error);
 			const message =
 				error instanceof Error ? error.message : "Unknown error occurred";
+			return { success: false, error: message };
+		}
+	});
+
+	// ==================== Knowledge Base / Connections ====================
+
+	ipcMain.handle("get-knowledge-base-overview", async () => {
+		try {
+			if (!appState.processingHelper.getSupermemoryHelper()) {
+				return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			}
+			const result = await appState.processingHelper.getKnowledgeBaseOverview();
+			if (!result) return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			return { success: true, data: result };
+		} catch (error: unknown) {
+			console.error("Error getting knowledge base overview:", error);
+			const message = error instanceof Error ? error.message : "Unknown error occurred";
+			return { success: false, error: message };
+		}
+	});
+
+	ipcMain.handle("add-knowledge-url", async (_, payload: unknown) => {
+		try {
+			if (!appState.processingHelper.getSupermemoryHelper()) {
+				return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			}
+			if (!payload || typeof payload !== "object") {
+				return { success: false, error: "Invalid payload" };
+			}
+			const obj = payload as { url?: unknown; title?: unknown };
+			const url = typeof obj.url === "string" ? obj.url : "";
+			const title = typeof obj.title === "string" ? obj.title : undefined;
+			if (!url.trim()) return { success: false, error: "URL is required" };
+
+			const result = await appState.processingHelper.addKnowledgeUrl({
+				url,
+				title,
+			});
+			if (!result) return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			return { success: true, data: result };
+		} catch (error: unknown) {
+			console.error("Error adding knowledge URL:", error);
+			const message = error instanceof Error ? error.message : "Unknown error occurred";
+			return { success: false, error: message };
+		}
+	});
+
+	ipcMain.handle("add-knowledge-text", async (_, payload: unknown) => {
+		try {
+			if (!appState.processingHelper.getSupermemoryHelper()) {
+				return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			}
+			if (!payload || typeof payload !== "object") {
+				return { success: false, error: "Invalid payload" };
+			}
+			const obj = payload as { title?: unknown; content?: unknown };
+			const title = typeof obj.title === "string" ? obj.title : "";
+			const content = typeof obj.content === "string" ? obj.content : "";
+			if (!title.trim()) return { success: false, error: "Title is required" };
+			if (!content.trim()) return { success: false, error: "Content is required" };
+
+			const result = await appState.processingHelper.addKnowledgeText({
+				title,
+				content,
+			});
+			if (!result) return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			return { success: true, data: result };
+		} catch (error: unknown) {
+			console.error("Error adding knowledge text:", error);
+			const message = error instanceof Error ? error.message : "Unknown error occurred";
+			return { success: false, error: message };
+		}
+	});
+
+	ipcMain.handle("list-connections", async () => {
+		try {
+			if (!appState.processingHelper.getSupermemoryHelper()) {
+				return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			}
+			const result = await appState.processingHelper.listConnections();
+			if (!result) return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			return { success: true, data: result };
+		} catch (error: unknown) {
+			console.error("Error listing connections:", error);
+			const message = error instanceof Error ? error.message : "Unknown error occurred";
+			return { success: false, error: message };
+		}
+	});
+
+	ipcMain.handle("create-connection", async (_, payload: unknown) => {
+		try {
+			if (!appState.processingHelper.getSupermemoryHelper()) {
+				return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			}
+			if (!payload || typeof payload !== "object") {
+				return { success: false, error: "Invalid payload" };
+			}
+			const obj = payload as {
+				provider?: unknown;
+				documentLimit?: unknown;
+				metadata?: unknown;
+				redirectUrl?: unknown;
+			};
+			const provider = typeof obj.provider === "string" ? obj.provider : "";
+			if (!CONNECTION_PROVIDERS.has(provider)) {
+				return { success: false, error: "Invalid provider" };
+			}
+
+			const documentLimit =
+				typeof obj.documentLimit === "number" && Number.isFinite(obj.documentLimit)
+					? obj.documentLimit
+					: undefined;
+			const redirectUrl = typeof obj.redirectUrl === "string" ? obj.redirectUrl : undefined;
+			const metadata =
+				obj.metadata && typeof obj.metadata === "object" && !Array.isArray(obj.metadata)
+					? (obj.metadata as Record<string, string | number | boolean>)
+					: undefined;
+
+			const result = await appState.processingHelper.createConnection(
+				provider as never,
+				{
+					documentLimit,
+					metadata,
+					redirectUrl,
+				},
+			);
+			if (!result) return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			return { success: true, data: result };
+		} catch (error: unknown) {
+			console.error("Error creating connection:", error);
+			const message = error instanceof Error ? error.message : "Unknown error occurred";
+			return { success: false, error: message };
+		}
+	});
+
+	ipcMain.handle("sync-connection", async (_, provider: unknown) => {
+		try {
+			if (!appState.processingHelper.getSupermemoryHelper()) {
+				return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			}
+			const p = typeof provider === "string" ? provider : "";
+			if (!CONNECTION_PROVIDERS.has(p)) {
+				return { success: false, error: "Invalid provider" };
+			}
+			const result = await appState.processingHelper.syncConnection(p as never);
+			if (!result) return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			return { success: true, data: result };
+		} catch (error: unknown) {
+			console.error("Error syncing connection:", error);
+			const message = error instanceof Error ? error.message : "Unknown error occurred";
+			return { success: false, error: message };
+		}
+	});
+
+	ipcMain.handle("delete-connection", async (_, provider: unknown) => {
+		try {
+			if (!appState.processingHelper.getSupermemoryHelper()) {
+				return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			}
+			const p = typeof provider === "string" ? provider : "";
+			if (!CONNECTION_PROVIDERS.has(p)) {
+				return { success: false, error: "Invalid provider" };
+			}
+			const result = await appState.processingHelper.deleteConnection(p as never);
+			if (!result) return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			return { success: true, data: result };
+		} catch (error: unknown) {
+			console.error("Error deleting connection:", error);
+			const message = error instanceof Error ? error.message : "Unknown error occurred";
+			return { success: false, error: message };
+		}
+	});
+
+	ipcMain.handle("list-connection-documents", async (_, provider: unknown) => {
+		try {
+			if (!appState.processingHelper.getSupermemoryHelper()) {
+				return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			}
+			const p = typeof provider === "string" ? provider : "";
+			if (!CONNECTION_PROVIDERS.has(p)) {
+				return { success: false, error: "Invalid provider" };
+			}
+			const result = await appState.processingHelper.listConnectionDocuments(p as never);
+			if (!result) return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			return { success: true, data: result };
+		} catch (error: unknown) {
+			console.error("Error listing connection documents:", error);
+			const message = error instanceof Error ? error.message : "Unknown error occurred";
+			return { success: false, error: message };
+		}
+	});
+
+	ipcMain.handle("open-external-url", async (_, url: unknown) => {
+		try {
+			const raw = typeof url === "string" ? url.trim() : "";
+			if (!raw) return { success: false, error: "URL is required" };
+			let parsed: URL;
+			try {
+				parsed = new URL(raw);
+			} catch {
+				return { success: false, error: "Invalid URL" };
+			}
+
+			if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+				return { success: false, error: "Unsupported URL protocol" };
+			}
+
+			await shell.openExternal(parsed.toString());
+			return { success: true };
+		} catch (error: unknown) {
+			console.error("Error opening external URL:", error);
+			const message = error instanceof Error ? error.message : "Unknown error occurred";
 			return { success: false, error: message };
 		}
 	});

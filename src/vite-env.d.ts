@@ -71,6 +71,77 @@ declare global {
 		aboutYou: AboutYouEntry[];
 	}
 
+	type SupermemoryProvider =
+		| "notion"
+		| "google-drive"
+		| "onedrive";
+
+	interface ListedDocument {
+		id: string;
+		title?: string | null;
+		type?: string | null;
+		status?: string | null;
+		summary?: string | null;
+		metadata?: Record<string, unknown> | null;
+		containerTags?: string[] | null;
+		connectionId?: string | null;
+		customId?: string | null;
+		createdAt?: string | null;
+		updatedAt?: string | null;
+	}
+
+	interface ListDocumentsResponse {
+		memories: ListedDocument[];
+		pagination?: {
+			currentPage?: number;
+			limit?: number;
+			totalItems?: number;
+			totalPages?: number;
+		} | null;
+	}
+
+	interface KnowledgeBaseOverview {
+		ready: ListedDocument[];
+		processing: Array<{
+			id: string;
+			status: string;
+			title?: string | null;
+		}>;
+		list: ListDocumentsResponse;
+	}
+
+	interface SupermemoryConnection {
+		id: string;
+		provider: string;
+		email?: string | null;
+		documentLimit?: number | null;
+		createdAt?: string | null;
+		expiresAt?: string | null;
+		metadata?: Record<string, unknown> | null;
+	}
+
+	interface CreateConnectionResponse {
+		id: string;
+		authLink: string;
+		expiresIn: string;
+		redirectsTo?: string | null;
+	}
+
+	interface DeleteConnectionResponse {
+		id: string;
+		provider: string;
+	}
+
+	interface ConnectionDocument {
+		id: string;
+		status: string;
+		type: string;
+		title?: string | null;
+		summary?: string | null;
+		createdAt?: string | null;
+		updatedAt?: string | null;
+	}
+
 	interface ElectronAPI {
 		updateContentDimensions: (dimensions: {
 			width: number;
@@ -201,6 +272,62 @@ declare global {
 
 		// Full reset (deletes all Supermemory data)
 		fullResetCustomization: () => Promise<{ success: boolean; error?: string }>;
+
+		// Knowledge Base / Connections
+		getKnowledgeBaseOverview: () => Promise<{
+			success: boolean;
+			data?: KnowledgeBaseOverview;
+			error?: string;
+		}>;
+		addKnowledgeUrl: (payload: {
+			url: string;
+			title?: string;
+		}) => Promise<{
+			success: boolean;
+			data?: { id: string; status: string };
+			error?: string;
+		}>;
+		addKnowledgeText: (payload: {
+			title: string;
+			content: string;
+		}) => Promise<{
+			success: boolean;
+			data?: { id: string; status: string };
+			error?: string;
+		}>;
+		listConnections: () => Promise<{
+			success: boolean;
+			data?: SupermemoryConnection[];
+			error?: string;
+		}>;
+		createConnection: (payload: {
+			provider: SupermemoryProvider;
+			documentLimit?: number;
+			metadata?: Record<string, string | number | boolean>;
+			redirectUrl?: string;
+		}) => Promise<{
+			success: boolean;
+			data?: CreateConnectionResponse;
+			error?: string;
+		}>;
+		syncConnection: (provider: SupermemoryProvider) => Promise<{
+			success: boolean;
+			data?: { message: string };
+			error?: string;
+		}>;
+		deleteConnection: (provider: SupermemoryProvider) => Promise<{
+			success: boolean;
+			data?: DeleteConnectionResponse;
+			error?: string;
+		}>;
+		listConnectionDocuments: (provider: SupermemoryProvider) => Promise<{
+			success: boolean;
+			data?: ConnectionDocument[];
+			error?: string;
+		}>;
+		openExternalUrl: (
+			url: string,
+		) => Promise<{ success: boolean; error?: string }>;
 	}
 
 	interface Window {

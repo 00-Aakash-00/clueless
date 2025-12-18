@@ -72,6 +72,77 @@ interface CustomizeConfig {
 	aboutYou: AboutYouEntry[];
 }
 
+type SupermemoryProvider =
+	| "notion"
+	| "google-drive"
+	| "onedrive";
+
+interface ListedDocument {
+	id: string;
+	title?: string | null;
+	type?: string | null;
+	status?: string | null;
+	summary?: string | null;
+	metadata?: Record<string, unknown> | null;
+	containerTags?: string[] | null;
+	connectionId?: string | null;
+	customId?: string | null;
+	createdAt?: string | null;
+	updatedAt?: string | null;
+}
+
+interface ListDocumentsResponse {
+	memories: ListedDocument[];
+	pagination?: {
+		currentPage?: number;
+		limit?: number;
+		totalItems?: number;
+		totalPages?: number;
+	} | null;
+}
+
+interface KnowledgeBaseOverview {
+	ready: ListedDocument[];
+	processing: Array<{
+		id: string;
+		status: string;
+		title?: string | null;
+	}>;
+	list: ListDocumentsResponse;
+}
+
+interface SupermemoryConnection {
+	id: string;
+	provider: string;
+	email?: string | null;
+	documentLimit?: number | null;
+	createdAt?: string | null;
+	expiresAt?: string | null;
+	metadata?: Record<string, unknown> | null;
+}
+
+interface CreateConnectionResponse {
+	id: string;
+	authLink: string;
+	expiresIn: string;
+	redirectsTo?: string | null;
+}
+
+interface DeleteConnectionResponse {
+	id: string;
+	provider: string;
+}
+
+interface ConnectionDocument {
+	id: string;
+	status: string;
+	type: string;
+	title?: string | null;
+	summary?: string | null;
+	createdAt?: string | null;
+	updatedAt?: string | null;
+}
+
 // Types for the exposed Electron API
 interface ElectronAPI {
 	updateContentDimensions: (dimensions: {
@@ -204,6 +275,62 @@ interface ElectronAPI {
 
 	// Full reset (deletes all Supermemory data)
 	fullResetCustomization: () => Promise<{ success: boolean; error?: string }>;
+
+	// Knowledge Base / Connections
+	getKnowledgeBaseOverview: () => Promise<{
+		success: boolean;
+		data?: KnowledgeBaseOverview;
+		error?: string;
+	}>;
+	addKnowledgeUrl: (payload: {
+		url: string;
+		title?: string;
+	}) => Promise<{
+		success: boolean;
+		data?: { id: string; status: string };
+		error?: string;
+	}>;
+	addKnowledgeText: (payload: {
+		title: string;
+		content: string;
+	}) => Promise<{
+		success: boolean;
+		data?: { id: string; status: string };
+		error?: string;
+	}>;
+	listConnections: () => Promise<{
+		success: boolean;
+		data?: SupermemoryConnection[];
+		error?: string;
+	}>;
+	createConnection: (payload: {
+		provider: SupermemoryProvider;
+		documentLimit?: number;
+		metadata?: Record<string, string | number | boolean>;
+		redirectUrl?: string;
+	}) => Promise<{
+		success: boolean;
+		data?: CreateConnectionResponse;
+		error?: string;
+	}>;
+	syncConnection: (provider: SupermemoryProvider) => Promise<{
+		success: boolean;
+		data?: { message: string };
+		error?: string;
+	}>;
+	deleteConnection: (provider: SupermemoryProvider) => Promise<{
+		success: boolean;
+		data?: DeleteConnectionResponse;
+		error?: string;
+	}>;
+	listConnectionDocuments: (provider: SupermemoryProvider) => Promise<{
+		success: boolean;
+		data?: ConnectionDocument[];
+		error?: string;
+	}>;
+	openExternalUrl: (
+		url: string,
+	) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const PROCESSING_EVENTS = {
@@ -397,4 +524,26 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
 	// Full reset (deletes all Supermemory data)
 	fullResetCustomization: () => ipcRenderer.invoke("full-reset-customization"),
+
+	// Knowledge Base / Connections
+	getKnowledgeBaseOverview: () =>
+		ipcRenderer.invoke("get-knowledge-base-overview"),
+	addKnowledgeUrl: (payload: { url: string; title?: string }) =>
+		ipcRenderer.invoke("add-knowledge-url", payload),
+	addKnowledgeText: (payload: { title: string; content: string }) =>
+		ipcRenderer.invoke("add-knowledge-text", payload),
+	listConnections: () => ipcRenderer.invoke("list-connections"),
+	createConnection: (payload: {
+		provider: SupermemoryProvider;
+		documentLimit?: number;
+		metadata?: Record<string, string | number | boolean>;
+		redirectUrl?: string;
+	}) => ipcRenderer.invoke("create-connection", payload),
+	syncConnection: (provider: SupermemoryProvider) =>
+		ipcRenderer.invoke("sync-connection", provider),
+	deleteConnection: (provider: SupermemoryProvider) =>
+		ipcRenderer.invoke("delete-connection", provider),
+	listConnectionDocuments: (provider: SupermemoryProvider) =>
+		ipcRenderer.invoke("list-connection-documents", provider),
+	openExternalUrl: (url: string) => ipcRenderer.invoke("open-external-url", url),
 } as ElectronAPI);
