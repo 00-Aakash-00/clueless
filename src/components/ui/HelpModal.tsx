@@ -66,9 +66,17 @@ export const HelpPanel: React.FC<HelpPanelProps> = ({
 		<div className="bg-black/60 backdrop-blur-xl border border-white/20 rounded-2xl p-4 w-full min-w-[300px] max-w-[420px]">
 			{/* Header */}
 			<div className="flex items-center justify-between mb-3 pb-3 border-b border-white/10">
-				<h3 className="text-sm font-medium text-white/90">
-					How to Use Clueless
-				</h3>
+				<div className="flex items-center gap-2">
+					<img
+						src="/logos/icon.png"
+						alt="Clueless"
+						className="h-5 w-auto opacity-90 select-none"
+						draggable={false}
+					/>
+					<h3 className="text-sm font-medium text-white/90">
+						How to Use Clueless
+					</h3>
+				</div>
 				{onClose && (
 					<button
 						type="button"

@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { BrowserWindow, screen } from "electron";
 import type { AppState } from "main";
@@ -101,6 +102,18 @@ export class WindowHelper {
 	public createWindow(): void {
 		if (this.mainWindow !== null) return;
 
+		const iconCandidates = [
+			path.join(__dirname, "..", "dist", "logos", "icon.png"),
+			path.join(__dirname, "..", "public", "logos", "icon.png"),
+		];
+		const windowIcon = iconCandidates.find((p) => {
+			try {
+				return fs.existsSync(p);
+			} catch {
+				return false;
+			}
+		});
+
 		const primaryDisplay = screen.getPrimaryDisplay();
 		const workArea = primaryDisplay.workAreaSize;
 		this.screenWidth = workArea.width;
@@ -139,6 +152,7 @@ export class WindowHelper {
 			height: initialHeight,
 			minWidth,
 			minHeight,
+			...(windowIcon ? { icon: windowIcon } : {}),
 			webPreferences: {
 				nodeIntegration: false,
 				contextIsolation: true,

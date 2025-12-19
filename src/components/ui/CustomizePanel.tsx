@@ -918,14 +918,22 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 		});
 	}, [kbDocQuery, kbReadyDocs]);
 
-	return (
-		<div className="bg-black/60 backdrop-blur-xl border border-white/20 rounded-2xl p-4 w-full min-w-[300px] max-w-[460px]">
-			<div className="flex items-center justify-between mb-3 pb-3 border-b border-white/10">
-				<h3 className="text-sm font-medium text-white/90">Customize</h3>
-				<div className="flex items-center gap-2">
-					<button
-						type="button"
-						onClick={() => {
+		return (
+			<div className="bg-black/60 backdrop-blur-xl border border-white/20 rounded-2xl p-4 w-full min-w-[300px] max-w-[460px]">
+				<div className="flex items-center justify-between mb-3 pb-3 border-b border-white/10">
+					<div className="flex items-center gap-2">
+						<img
+							src="/logos/icon.png"
+							alt="Clueless"
+							className="h-5 w-auto opacity-90 select-none"
+							draggable={false}
+						/>
+						<h3 className="text-sm font-medium text-white/90">Customize</h3>
+					</div>
+					<div className="flex items-center gap-2">
+						<button
+							type="button"
+							onClick={() => {
 							if (activeTab === "knowledge") refreshKnowledgeBase();
 							if (activeTab === "integrations") refreshConnections();
 							if (activeTab === "personal") refreshProfile();

@@ -21,6 +21,13 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
 	return (
 		<div>
 			<div className="text-xs text-white/90 bg-black/60 backdrop-blur-xl border border-white/20 rounded-2xl py-2 px-4 flex items-center gap-4 draggable-area whitespace-nowrap">
+				<img
+					src="/logos/icon.png"
+					alt="Clueless"
+					className="h-5 w-auto opacity-90 select-none"
+					draggable={false}
+				/>
+
 				{/* Show/Hide */}
 				<div className="flex items-center gap-2">
 					<span className="text-[11px] leading-none">Show/Hide</span>

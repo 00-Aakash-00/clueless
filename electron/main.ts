@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { app, type BrowserWindow, Menu, nativeImage, Tray } from "electron";
 import { initializeIpcHandlers } from "./ipcHandlers";
 import { ProcessingHelper } from "./ProcessingHelper";
@@ -252,17 +254,26 @@ export class AppState {
 	}
 
 	public createTray(): void {
-		// Create a simple tray icon
-		const image = nativeImage.createEmpty();
+		const candidates = [
+			path.join(__dirname, "..", "dist", "logos", "icon.png"),
+			path.join(__dirname, "..", "public", "logos", "icon.png"),
+			path.join(app.getAppPath(), "dist", "logos", "icon.png"),
+			path.join(app.getAppPath(), "public", "logos", "icon.png"),
+		];
+		const iconPath = candidates.find((p) => {
+			try {
+				return fs.existsSync(p);
+			} catch {
+				return false;
+			}
+		});
 
-		// Try to use a system template image for better integration
-		let trayImage = image;
-		try {
-			// Create a minimal icon - just use an empty image and set the title
-			trayImage = nativeImage.createFromBuffer(Buffer.alloc(0));
-		} catch (_error) {
-			console.log("Using empty tray image");
-			trayImage = nativeImage.createEmpty();
+		const trayImage = iconPath
+			? nativeImage.createFromPath(iconPath)
+			: nativeImage.createEmpty();
+
+		if (process.platform === "darwin" && !trayImage.isEmpty()) {
+			trayImage.setTemplateImage(true);
 		}
 
 		this.tray = new Tray(trayImage);
