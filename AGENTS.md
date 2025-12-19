@@ -8,13 +8,13 @@ Clueless is an Electron desktop app that provides an invisible AI assistant over
 
 ```bash
 # Development mode (starts Vite + Electron concurrently)
-npm start
+pnpm start
 
 # Or equivalently
-npm run app:dev
+pnpm run app:dev
 
 # Build for production
-npm run dist
+pnpm run dist
 ```
 
 ## Project Structure
