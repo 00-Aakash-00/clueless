@@ -32,6 +32,21 @@ const ROLE_LABELS: Record<string, string> = {
 
 type TabKey = "knowledge" | "integrations" | "personal";
 
+type UploadPhase = "preparing" | "uploading" | "processing" | "ready" | "failed";
+
+type UploadTask = {
+	localId: string;
+	name: string;
+	size: number;
+	mimeType?: string;
+	phase: UploadPhase;
+	status?: string;
+	supermemoryId?: string;
+	error?: string;
+	startedAt: number;
+	updatedAt: number;
+};
+
 const PROVIDERS: Array<{
 	id: SupermemoryProvider;
 	label: string;
@@ -187,18 +202,13 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 	const [activeTab, setActiveTab] = useState<TabKey>("knowledge");
 
 	const [supermemoryAvailable, setSupermemoryAvailable] = useState(true);
+	const [containerTag, setContainerTag] = useState<string | null>(null);
 	const [saveStatus, setSaveStatus] = useState<{
 		type: "success" | "error" | null;
 		message: string;
 	}>({ type: null, message: "" });
 
-	const [uploadStats, setUploadStats] = useState<{
-		uploadedThisSession: number;
-		currentUploadName: string;
-	}>({
-		uploadedThisSession: 0,
-		currentUploadName: "",
-	});
+	const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
 	const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 	const PERSONALIZATION_DISABLED_MESSAGE =
 		"Personalization is disabled. Add SUPERMEMORY_API_KEY in .env and restart.";
@@ -220,11 +230,11 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 	// Knowledge base state
 	const [kbOverview, setKbOverview] = useState<KnowledgeBaseOverview | null>(null);
 	const [kbLoading, setKbLoading] = useState(false);
-	const [isUploading, setIsUploading] = useState(false);
 	const [kbUrl, setKbUrl] = useState("");
 	const [kbUrlTitle, setKbUrlTitle] = useState("");
 	const [kbNoteTitle, setKbNoteTitle] = useState("");
 	const [kbNoteContent, setKbNoteContent] = useState("");
+	const [kbDocQuery, setKbDocQuery] = useState("");
 
 	// Integrations state
 	const [connections, setConnections] = useState<SupermemoryConnection[]>([]);
@@ -305,12 +315,112 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 		}
 	}, [requireSupermemory]);
 
+	const uploadSummary = useMemo(() => {
+		const active = uploadTasks.filter(
+			(task) => task.phase !== "ready" && task.phase !== "failed",
+		);
+		const ready = uploadTasks.filter((task) => task.phase === "ready");
+		const failed = uploadTasks.filter((task) => task.phase === "failed");
+		const uploadingNow = uploadTasks.some(
+			(task) => task.phase === "preparing" || task.phase === "uploading",
+		);
+		const processingIds = uploadTasks
+			.filter(
+				(task) =>
+					task.phase === "processing" &&
+					typeof task.supermemoryId === "string" &&
+					task.supermemoryId.trim().length > 0,
+			)
+			.map((task) => task.supermemoryId as string)
+			.sort();
+
+		return {
+			active,
+			ready,
+			failed,
+			uploadingNow,
+			processingKey: processingIds.join("|"),
+		};
+	}, [uploadTasks]);
+
+	useEffect(() => {
+		if (!supermemoryAvailable) return;
+		if (!uploadSummary.processingKey) return;
+
+		const ids = uploadSummary.processingKey.split("|").filter(Boolean);
+		if (ids.length === 0) return;
+
+		let cancelled = false;
+
+		const pollOnce = async () => {
+			try {
+				const results = await Promise.all(
+					ids.map((id) => window.electronAPI.getDocumentStatus(id)),
+				);
+				if (cancelled) return;
+
+				const byId = new Map<string, { status: string; title?: string | null }>();
+				for (const res of results) {
+					if (!res?.success || !res.data) continue;
+					byId.set(res.data.id, res.data);
+				}
+
+				let shouldRefresh = false;
+				setUploadTasks((prev) =>
+					prev.map((task) => {
+						if (task.phase !== "processing") return task;
+						if (!task.supermemoryId) return task;
+						const next = byId.get(task.supermemoryId);
+						if (!next) return task;
+
+						const status = next.status;
+						const nextPhase: UploadPhase =
+							status === "done"
+								? "ready"
+								: status === "failed"
+									? "failed"
+									: "processing";
+						if (nextPhase !== "processing") shouldRefresh = true;
+
+						return {
+							...task,
+							status,
+							phase: nextPhase,
+							error:
+								nextPhase === "failed" ? task.error || "Processing failed." : task.error,
+							updatedAt: Date.now(),
+						};
+					}),
+				);
+
+				if (shouldRefresh) {
+					void refreshKnowledgeBase();
+				}
+			} catch {
+				// ignore polling failures; the user can manually refresh
+			}
+		};
+
+		const interval = setInterval(() => {
+			void pollOnce();
+		}, 2500);
+
+		void pollOnce();
+
+		return () => {
+			cancelled = true;
+			clearInterval(interval);
+		};
+	}, [refreshKnowledgeBase, supermemoryAvailable, uploadSummary.processingKey]);
+
 	useEffect(() => {
 		const loadConfig = async () => {
 			try {
 				const config = await window.electronAPI.getCustomizeConfig();
 				if (config) {
 					setSupermemoryAvailable(true);
+					const tag = await window.electronAPI.getSupermemoryContainerTag();
+					setContainerTag(tag);
 					setSelectedRole(config.role || "default");
 					setCustomRoleText(config.customRoleText || "");
 					setTextContext(config.textContext || "");
@@ -324,6 +434,7 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 					]);
 				} else {
 					setSupermemoryAvailable(false);
+					setContainerTag(null);
 					setAboutYouEntries([]);
 				}
 			} catch (error) {
@@ -402,34 +513,110 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 		if (!files || files.length === 0) return;
 		if (!requireSupermemory()) return;
 
-		setIsUploading(true);
 		try {
+			const createLocalId = (): string => {
+				if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+					return crypto.randomUUID();
+				}
+				return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+			};
+
 			let uploadedCount = 0;
 			let failedCount = 0;
 
 			for (const file of Array.from(files)) {
+				const localId = createLocalId();
+				const now = Date.now();
+
+				const initialTask: UploadTask = {
+					localId,
+					name: file.name,
+					size: file.size,
+					mimeType: file.type || undefined,
+					phase: "preparing",
+					startedAt: now,
+					updatedAt: now,
+				};
+
+				setUploadTasks((prev) => [initialTask, ...prev].slice(0, 20));
+
 				if (file.size > MAX_UPLOAD_BYTES) {
 					failedCount += 1;
+					setUploadTasks((prev) =>
+						prev.map((task) =>
+							task.localId === localId
+								? {
+										...task,
+										phase: "failed",
+										error: "File too large (max 50MB).",
+										updatedAt: Date.now(),
+									}
+								: task,
+						),
+					);
 					continue;
 				}
 
-				setUploadStats((prev) => ({ ...prev, currentUploadName: file.name }));
+				try {
+					const bytes = new Uint8Array(await file.arrayBuffer());
+					setUploadTasks((prev) =>
+						prev.map((task) =>
+							task.localId === localId
+								? { ...task, phase: "uploading", updatedAt: Date.now() }
+								: task,
+						),
+					);
 
-				const bytes = new Uint8Array(await file.arrayBuffer());
-				const result = await window.electronAPI.uploadDocumentData({
-					name: file.name,
-					data: bytes,
-					mimeType: file.type || undefined,
-				});
+					const result = await window.electronAPI.uploadDocumentData({
+						name: file.name,
+						data: bytes,
+						mimeType: file.type || undefined,
+					});
 
-				if (result.success && result.data) uploadedCount += 1;
-				else failedCount += 1;
+					if (!result.success || !result.data) {
+						throw new Error(result.error || "Upload failed");
+					}
+
+					uploadedCount += 1;
+					const documentId = result.data.id;
+					const normalizedStatus =
+						result.data.status === "processing" ? "queued" : result.data.status;
+					const nextPhase: UploadPhase =
+						normalizedStatus === "done"
+							? "ready"
+							: normalizedStatus === "failed"
+								? "failed"
+								: "processing";
+					setUploadTasks((prev) =>
+						prev.map((task) =>
+								task.localId === localId
+									? {
+											...task,
+											phase: nextPhase,
+											supermemoryId: documentId,
+											status: normalizedStatus,
+											updatedAt: Date.now(),
+										}
+									: task,
+						),
+					);
+				} catch (error) {
+					failedCount += 1;
+					const message = error instanceof Error ? error.message : String(error);
+					setUploadTasks((prev) =>
+						prev.map((task) =>
+							task.localId === localId
+								? {
+										...task,
+										phase: "failed",
+										error: message || "Upload failed",
+										updatedAt: Date.now(),
+									}
+								: task,
+						),
+					);
+				}
 			}
-
-			setUploadStats((prev) => ({
-				uploadedThisSession: prev.uploadedThisSession + uploadedCount,
-				currentUploadName: "",
-			}));
 
 			if (uploadedCount > 0) {
 				showStatus(
@@ -442,10 +629,8 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 				showStatus("error", "Upload failed");
 			}
 		} catch {
-			setUploadStats((prev) => ({ ...prev, currentUploadName: "" }));
 			showStatus("error", "Failed to upload file");
 		} finally {
-			setIsUploading(false);
 			await refreshKnowledgeBase();
 		}
 	};
@@ -700,8 +885,38 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 		}
 	};
 
+	const formatUploadLabel = (task: UploadTask): string => {
+		if (task.phase === "preparing") return "Reading file (local)";
+		if (task.phase === "uploading") return "Uploading from app to Supermemory";
+		if (task.phase === "processing") {
+			return `Processing${task.status ? `: ${task.status}` : ""}`;
+		}
+		if (task.phase === "ready") return "Ready";
+		return task.error ? `Failed: ${task.error}` : "Failed";
+	};
+
+	const clearFinishedUploads = () => {
+		setUploadTasks((prev) =>
+			prev.filter((task) => task.phase !== "ready" && task.phase !== "failed"),
+		);
+	};
+
 	const kbReadyDocs = kbOverview?.ready ?? [];
 	const kbProcessing = kbOverview?.processing ?? [];
+	const filteredReadyDocs = useMemo(() => {
+		const q = kbDocQuery.trim().toLowerCase();
+		if (!q) return kbReadyDocs;
+		return kbReadyDocs.filter((doc) => {
+			const title = formatDocTitle(doc).toLowerCase();
+			const subtitle = formatDocSubtitle(doc).toLowerCase();
+			if (title.includes(q) || subtitle.includes(q) || doc.id.toLowerCase().includes(q)) {
+				return true;
+			}
+			const metadata = (doc.metadata ?? {}) as Record<string, unknown>;
+			const filename = typeof metadata.filename === "string" ? metadata.filename.toLowerCase() : "";
+			return filename.includes(q);
+		});
+	}, [kbDocQuery, kbReadyDocs]);
 
 	return (
 		<div className="bg-black/60 backdrop-blur-xl border border-white/20 rounded-2xl p-4 w-full min-w-[300px] max-w-[460px]">
@@ -752,31 +967,61 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 				</div>
 			)}
 
-			{uploadStats.currentUploadName && (
-				<div className="text-xs px-3 py-2 rounded-lg mb-3 bg-yellow-500/10 text-yellow-300 flex items-center gap-2">
-					<svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
-						<circle
-							className="opacity-25"
-							cx="12"
-							cy="12"
-							r="10"
-							stroke="currentColor"
-							strokeWidth="4"
-							fill="none"
-						/>
-						<path
-							className="opacity-75"
-							fill="currentColor"
-							d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-						/>
-					</svg>
-					Uploading {uploadStats.currentUploadName}...
-				</div>
-			)}
-
-			{uploadStats.uploadedThisSession > 0 && (
-				<div className="text-[10px] px-3 py-1.5 rounded-lg mb-3 bg-white/5 text-white/50">
-					Uploaded this session: {uploadStats.uploadedThisSession}
+			{uploadTasks.length > 0 && (
+				<div className="px-3 py-2 rounded-lg mb-3 bg-white/5 border border-white/10">
+					<div className="flex items-center justify-between mb-2">
+						<p className="text-[11px] text-white/80 font-medium">Uploads</p>
+						<button
+							type="button"
+							onClick={clearFinishedUploads}
+							disabled={uploadSummary.ready.length + uploadSummary.failed.length === 0}
+							className="text-[10px] text-white/40 hover:text-white/70 disabled:opacity-50"
+						>
+							Clear finished
+						</button>
+					</div>
+					<div className="space-y-1">
+						{uploadTasks.slice(0, 6).map((task) => (
+							<div
+								key={task.localId}
+								className="flex items-start justify-between gap-2 bg-black/20 rounded-md px-2 py-2"
+							>
+								<div className="min-w-0 flex-1">
+									<span className="text-[11px] font-medium text-white/80 block truncate">
+										{task.name}
+									</span>
+									<p className="text-[9px] text-white/40 line-clamp-2">
+										{formatUploadLabel(task)}
+									</p>
+								</div>
+								<span
+									className={`text-[10px] flex-shrink-0 ${
+										task.phase === "ready"
+											? "text-green-300/80"
+											: task.phase === "failed"
+												? "text-red-300/80"
+												: "text-yellow-300/80"
+									}`}
+								>
+									{task.phase === "ready"
+										? "Ready"
+										: task.phase === "failed"
+											? "Failed"
+											: task.phase === "uploading"
+												? "Uploading"
+												: task.phase === "preparing"
+													? "Preparing"
+													: task.status || "Processing"}
+								</span>
+							</div>
+						))}
+					</div>
+					{(uploadSummary.ready.length > 0 || uploadSummary.failed.length > 0) && (
+						<p className="text-[10px] text-white/40 mt-2">
+							This session: {uploadSummary.ready.length} ready •{" "}
+							{uploadSummary.failed.length} failed
+						</p>
+					)}
 				</div>
 			)}
 
@@ -837,6 +1082,37 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 				{activeTab === "knowledge" && (
 					<>
 						<Section
+							title="Workspace Scope"
+							icon={<IoCreate className="w-4 h-4" />}
+						>
+							<p className="text-[10px] text-white/40 mb-2">
+								This tag isolates your files, notes, call transcripts, and profile so projects don’t mix.
+								To change it, set <span className="text-white/70">SUPERMEMORY_CONTAINER_TAG</span> in
+								<code className="mx-1 px-1 py-0.5 bg-white/10 rounded text-white/70">.env</code>
+								and restart.
+							</p>
+							<div className="flex items-center justify-between gap-2 bg-white/5 rounded-md px-2 py-2">
+								<span className="text-[10px] text-white/70 truncate">
+									{containerTag || "Unavailable"}
+								</span>
+								<button
+									type="button"
+									onClick={() => {
+										if (!containerTag) return;
+										navigator.clipboard
+											.writeText(containerTag)
+											.then(() => showStatus("success", "Copied workspace tag"))
+											.catch(() => showStatus("error", "Could not copy"));
+									}}
+									disabled={!containerTag}
+									className="text-[10px] text-white/50 hover:text-white/80 disabled:opacity-50"
+								>
+									Copy
+								</button>
+							</div>
+						</Section>
+
+						<Section
 							title="Add Files"
 							icon={<IoCloudUpload className="w-4 h-4" />}
 							defaultOpen={true}
@@ -847,8 +1123,8 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 							<FileDropZone
 								accept=".pdf,.txt,.md,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.csv,.mp4,.webm"
 								multiple
-								disabled={isUploading || !supermemoryAvailable}
-								helperText={isUploading ? "Uploading..." : "Drag & drop or"}
+								disabled={uploadSummary.uploadingNow || !supermemoryAvailable}
+								helperText={uploadSummary.uploadingNow ? "Uploading..." : "Drag & drop or"}
 								onFilesSelected={handleKnowledgeFileUpload}
 							/>
 							<button
@@ -861,10 +1137,10 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 							</button>
 						</Section>
 
-							<Section title="Add Link" icon={<IoLink className="w-4 h-4" />}>
-								<p className="text-[10px] text-white/40 mb-2">
-									Paste a URL (docs page, article, video). Re-adding the same URL updates instead of duplicating.
-								</p>
+								<Section title="Add Link" icon={<IoLink className="w-4 h-4" />}>
+									<p className="text-[10px] text-white/40 mb-2">
+										Save a URL reference (bookmark). Re-adding the same URL updates instead of duplicating. For searchable content, upload a file or paste key excerpts into a note.
+									</p>
 							<input
 								value={kbUrlTitle}
 								onChange={(e) => setKbUrlTitle(e.target.value)}
@@ -940,13 +1216,31 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 									Refresh
 								</button>
 							</div>
+							<div className="mb-2">
+								<input
+									value={kbDocQuery}
+									onChange={(e) => setKbDocQuery(e.target.value)}
+									disabled={!supermemoryAvailable}
+									placeholder="Filter documents..."
+									className="w-full bg-white/10 text-white text-xs rounded-md px-2 py-1.5 border border-white/20 focus:outline-none focus:border-white/40 placeholder-white/40 disabled:opacity-50"
+								/>
+								{kbDocQuery.trim() && (
+									<p className="text-[10px] text-white/40 mt-1">
+										Showing {Math.min(30, filteredReadyDocs.length)} of {filteredReadyDocs.length} matches
+									</p>
+								)}
+							</div>
 							{kbReadyDocs.length === 0 ? (
 								<p className="text-[10px] text-white/40">
 									No ready documents yet.
 								</p>
+							) : filteredReadyDocs.length === 0 ? (
+								<p className="text-[10px] text-white/40">
+									No matches. Try a different keyword.
+								</p>
 							) : (
 								<div className="space-y-1">
-									{kbReadyDocs.slice(0, 30).map((doc) => (
+									{filteredReadyDocs.slice(0, 30).map((doc) => (
 										<div
 											key={doc.id}
 											className="flex items-start justify-between gap-2 bg-white/5 rounded-md px-2 py-2"
@@ -974,9 +1268,9 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 											</button>
 										</div>
 									))}
-									{kbReadyDocs.length > 30 && (
+									{filteredReadyDocs.length > 30 && (
 										<p className="text-[10px] text-white/40">
-											Showing 30 of {kbReadyDocs.length}.
+											Showing 30 of {filteredReadyDocs.length}.
 										</p>
 									)}
 								</div>

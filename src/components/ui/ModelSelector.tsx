@@ -10,11 +10,13 @@ interface ModelConfig {
 interface ModelSelectorProps {
 	onModelChange?: (model: string) => void;
 	onChatOpen?: () => void;
+	onClearChat?: () => void;
 }
 
 const ModelSelector: React.FC<ModelSelectorProps> = ({
 	onModelChange,
 	onChatOpen,
+	onClearChat,
 }) => {
 	const [currentConfig, setCurrentConfig] = useState<ModelConfig | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
@@ -213,6 +215,16 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 					className="px-3 py-2 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:text-white/30 text-white/90 text-xs rounded-lg transition-all"
 				>
 					Test
+				</button>
+			</div>
+
+			<div className="flex gap-2">
+				<button
+					type="button"
+					onClick={() => onClearChat?.()}
+					className="flex-1 px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs rounded-lg transition-all"
+				>
+					Clear chat history
 				</button>
 			</div>
 

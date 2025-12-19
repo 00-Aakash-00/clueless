@@ -57,6 +57,11 @@ export const HelpPanel: React.FC<HelpPanelProps> = ({
 	variant = "queue",
 	onClose,
 }) => {
+	const isMac =
+		typeof navigator !== "undefined" &&
+		/Mac|iPhone|iPad|iPod/.test(navigator.platform);
+	const modKey = isMac ? "⌘" : "Ctrl";
+
 	return (
 		<div className="bg-black/60 backdrop-blur-xl border border-white/20 rounded-2xl p-4 w-full min-w-[300px] max-w-[420px]">
 			{/* Header */}
@@ -82,19 +87,19 @@ export const HelpPanel: React.FC<HelpPanelProps> = ({
 					<div className="bg-white/5 rounded-lg px-3">
 						<ShortcutRow
 							label="Toggle Window"
-							keys={["⌘", "B"]}
+							keys={[modKey, "B"]}
 							description="Show or hide the overlay"
 						/>
 						<ShortcutRow
 							label="Take Screenshot"
-							keys={["⌘", "H"]}
+							keys={isMac ? [modKey, "⇧", "H"] : [modKey, "H"]}
 							description="Capture screen content"
 						/>
 						<ShortcutRow
 							label={
 								variant === "queue" ? "Solve Problem" : "Debug / Process"
 							}
-							keys={["⌘", "↵"]}
+							keys={[modKey, "↵"]}
 							description={
 								variant === "queue"
 									? "Generate solution from screenshots"
@@ -103,12 +108,12 @@ export const HelpPanel: React.FC<HelpPanelProps> = ({
 						/>
 						<ShortcutRow
 							label="Start Over"
-							keys={["⌘", "R"]}
+							keys={[modKey, "R"]}
 							description="Clear everything and start fresh"
 						/>
 						<ShortcutRow
 							label="Focus Chat"
-							keys={["⌘", "K"]}
+							keys={[modKey, "K"]}
 							description="Open chat and start typing"
 						/>
 					</div>
@@ -121,8 +126,15 @@ export const HelpPanel: React.FC<HelpPanelProps> = ({
 							<span className="text-white/40 font-medium">1.</span>
 							<span>
 								Take a screenshot of the problem using{" "}
-								<kbd className="bg-white/10 rounded px-1 py-0.5 text-[10px] text-white/70">⌘</kbd>{" "}
-								<kbd className="bg-white/10 rounded px-1 py-0.5 text-[10px] text-white/70">H</kbd>
+								<kbd className="bg-white/10 rounded px-1 py-0.5 text-[10px] text-white/70">{modKey}</kbd>{" "}
+								{isMac && (
+									<kbd className="bg-white/10 rounded px-1 py-0.5 text-[10px] text-white/70">
+										⇧
+									</kbd>
+								)}{" "}
+								<kbd className="bg-white/10 rounded px-1 py-0.5 text-[10px] text-white/70">
+									H
+								</kbd>
 							</span>
 						</div>
 						<div className="flex gap-2">
@@ -135,7 +147,7 @@ export const HelpPanel: React.FC<HelpPanelProps> = ({
 							<span className="text-white/40 font-medium">3.</span>
 							<span>
 								Press{" "}
-								<kbd className="bg-white/10 rounded px-1 py-0.5 text-[10px] text-white/70">⌘</kbd>{" "}
+								<kbd className="bg-white/10 rounded px-1 py-0.5 text-[10px] text-white/70">{modKey}</kbd>{" "}
 								<kbd className="bg-white/10 rounded px-1 py-0.5 text-[10px] text-white/70">↵</kbd>{" "}
 								to generate a solution
 							</span>
@@ -144,7 +156,7 @@ export const HelpPanel: React.FC<HelpPanelProps> = ({
 							<span className="text-white/40 font-medium">4.</span>
 							<span>
 								Debug by adding more screenshots and pressing{" "}
-								<kbd className="bg-white/10 rounded px-1 py-0.5 text-[10px] text-white/70">⌘</kbd>{" "}
+								<kbd className="bg-white/10 rounded px-1 py-0.5 text-[10px] text-white/70">{modKey}</kbd>{" "}
 								<kbd className="bg-white/10 rounded px-1 py-0.5 text-[10px] text-white/70">↵</kbd>{" "}
 								again
 							</span>

@@ -146,7 +146,7 @@ const handleMyPanelToggle = () => {
 | Shortcut | Action |
 |----------|--------|
 | Cmd+B | Toggle window visibility |
-| Cmd+H | Take screenshot |
+| Cmd+Shift+H | Take screenshot |
 | Cmd+Enter | Solve/Process screenshots |
 | Cmd+R | Reset/Start over |
 | Cmd+K | Focus chat input |

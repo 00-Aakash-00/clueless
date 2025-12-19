@@ -1,6 +1,11 @@
 # Clueless
 
-The invisible desktop AI assistant that provides real-time insights, answers, and support during meetings, interviews, presentations, and professional conversations. Powered by Groq Cloud for ultra-fast inference.
+An invisible, always-on-top desktop AI assistant overlay for meetings, interviews, and presentations — with screenshot understanding, chat, debugging via follow-up screenshots, and (optional) live call captions + reply suggestions.
+
+Powered by:
+- **Groq Cloud** (LLM + vision)
+- **Deepgram** (optional, live transcription for Call Assist)
+- **Supermemory** (optional, personal knowledge base + “About You”)
 
 ## 🚀 Quick Start Guide
 
@@ -8,7 +13,9 @@ The invisible desktop AI assistant that provides real-time insights, answers, an
 
 - **Node.js** v18 or higher ([Download](https://nodejs.org/))
 - **Git** ([Download](https://git-scm.com/downloads))
-- **Groq API Key** (free at [Groq Console](https://console.groq.com/keys))
+- **Groq API Key** (**required**) (free at [Groq Console](https://console.groq.com/keys))
+- **Deepgram API Key** (**optional**, enables Call Assist) ([Deepgram Console](https://console.deepgram.com/))
+- **Supermemory API Key** (**optional**, enables Customize/Knowledge Base) ([Supermemory](https://supermemory.ai/))
 
 ---
 
@@ -51,13 +58,23 @@ touch .env
 
 # Open in your preferred editor and add:
 echo "GROQ_API_KEY=your_groq_api_key_here" >> .env
-echo "GROQ_TEXT_MODEL=openai/gpt-oss-20b" >> .env
+echo "GROQ_TEXT_MODEL=auto" >> .env
+
+# Optional (Call Assist - Deepgram live captions)
+echo "DEEPGRAM_API_KEY=your_deepgram_api_key_here" >> .env
+
+# Optional (Customize/Knowledge Base - Supermemory)
+echo "SUPERMEMORY_API_KEY=your_supermemory_api_key_here" >> .env
 ```
 
 Or manually create a `.env` file in the root folder with:
 ```env
 GROQ_API_KEY=your_groq_api_key_here
-GROQ_TEXT_MODEL=openai/gpt-oss-20b
+GROQ_TEXT_MODEL=auto
+# Optional:
+# GROQ_VISION_MODEL=meta-llama/llama-4-scout-17b-16e-instruct
+# DEEPGRAM_API_KEY=your_deepgram_api_key_here
+# SUPERMEMORY_API_KEY=your_supermemory_api_key_here
 ```
 
 ### Step 4: Run the App
@@ -75,10 +92,11 @@ npm run dist
 
 | Shortcut | Action |
 |----------|--------|
+| `Cmd + Shift + Space` | Center and show the overlay |
 | `Cmd + B` | Toggle window visibility (show/hide) |
 | `Cmd + H` | Take screenshot for AI analysis |
 | `Cmd + K` | Open chat and focus input |
-| `Cmd + Enter` | Process screenshots and get solution |
+| `Cmd + Enter` | Solve from screenshots / Debug with extra screenshots |
 | `Cmd + R` | Reset/Cancel current operation |
 | `Cmd + Arrow Keys` | Move window around screen |
 | `Cmd + Q` | Quit the application |
@@ -86,8 +104,9 @@ npm run dist
 ### macOS Permissions
 
 On first run, you may need to grant permissions:
-1. **Screen Recording**: System Preferences → Privacy & Security → Screen Recording → Enable for Clueless
-2. **Accessibility** (optional): System Preferences → Privacy & Security → Accessibility → Enable for Clueless
+1. **Screen Recording**: System Settings → Privacy & Security → Screen Recording → Enable for Clueless (required for screenshots; also used by Call Assist “Mic + System” mode)
+2. **Microphone**: System Settings → Privacy & Security → Microphone → Enable for Clueless (required for Call Assist)
+3. **Accessibility** (optional): System Settings → Privacy & Security → Accessibility → Enable for Clueless
 
 ---
 
@@ -135,13 +154,21 @@ New-Item -Path ".env" -ItemType File
 
 # Add your API key (replace with your actual key)
 Add-Content -Path ".env" -Value "GROQ_API_KEY=your_groq_api_key_here"
-Add-Content -Path ".env" -Value "GROQ_TEXT_MODEL=openai/gpt-oss-20b"
+Add-Content -Path ".env" -Value "GROQ_TEXT_MODEL=auto"
+
+# Optional
+Add-Content -Path ".env" -Value "DEEPGRAM_API_KEY=your_deepgram_api_key_here"
+Add-Content -Path ".env" -Value "SUPERMEMORY_API_KEY=your_supermemory_api_key_here"
 ```
 
 Or manually create a `.env` file in the root folder with Notepad:
 ```env
 GROQ_API_KEY=your_groq_api_key_here
-GROQ_TEXT_MODEL=openai/gpt-oss-20b
+GROQ_TEXT_MODEL=auto
+# Optional:
+# GROQ_VISION_MODEL=meta-llama/llama-4-scout-17b-16e-instruct
+# DEEPGRAM_API_KEY=your_deepgram_api_key_here
+# SUPERMEMORY_API_KEY=your_supermemory_api_key_here
 ```
 
 ### Step 4: Run the App
@@ -159,13 +186,13 @@ npm run dist
 
 | Shortcut | Action |
 |----------|--------|
+| `Ctrl + Shift + Space` | Center and show the overlay |
 | `Ctrl + B` | Toggle window visibility (show/hide) |
 | `Ctrl + H` | Take screenshot for AI analysis |
 | `Ctrl + K` | Open chat and focus input |
-| `Ctrl + Enter` | Process screenshots and get solution |
+| `Ctrl + Enter` | Solve from screenshots / Debug with extra screenshots |
 | `Ctrl + R` | Reset/Cancel current operation |
 | `Ctrl + Arrow Keys` | Move window around screen |
-| `Ctrl + Q` | Quit the application |
 
 ### Windows Firewall
 
@@ -221,7 +248,9 @@ npm rebuild sharp
 ```bash
 # Create and edit .env file
 echo "GROQ_API_KEY=your_groq_api_key_here" > .env
-echo "GROQ_TEXT_MODEL=openai/gpt-oss-20b" >> .env
+echo "GROQ_TEXT_MODEL=auto" >> .env
+echo "DEEPGRAM_API_KEY=your_deepgram_api_key_here" >> .env      # optional
+echo "SUPERMEMORY_API_KEY=your_supermemory_api_key_here" >> .env # optional
 ```
 
 ### Step 4: Run the App
@@ -241,8 +270,8 @@ Same as Windows - use `Ctrl` instead of `Cmd`.
 **Features:**
 - Ultra-fast inference (fastest available)
 - Free tier available with generous limits
-- Vision model support (Llama 4 Scout)
-- Two text models: GPT-OSS 20B and 120B
+- Vision model support (default: Llama 4 Scout)
+- Text models: `auto`, GPT-OSS 20B, GPT-OSS 120B (switchable in-app)
 
 **Getting Your API Key:**
 1. Go to [Groq Console](https://console.groq.com/keys)
@@ -254,9 +283,41 @@ Same as Windows - use `Ctrl` instead of `Cmd`.
 
 | Model | Description |
 |-------|-------------|
-| `openai/gpt-oss-20b` | Fast, efficient text model (default) |
+| `auto` | Picks the best text model per request |
+| `openai/gpt-oss-20b` | Fast, efficient text model |
 | `openai/gpt-oss-120b` | Larger, more capable text model |
 | `meta-llama/llama-4-scout-17b-16e-instruct` | Vision model (auto-used for images) |
+
+---
+
+## 🗣️ Call Assist (Deepgram)
+
+Call Assist provides **live captions** and (optionally) **suggested replies** during a conversation.
+
+**Setup**
+- Add `DEEPGRAM_API_KEY` to `.env` (required to start a session)
+- In the app: `Call` → `Start`
+
+**Modes**
+- **Mic + System (2‑channel)**: captures your microphone + system audio (best results, requires screen/system-audio capture support)
+- **Mic Only (fallback)**: captures only your microphone and uses Deepgram diarization
+
+**Notes**
+- The app writes a local `.wav` recording to Electron’s user data directory (the full path is shown in the Call Assist panel).
+- If `SUPERMEMORY_API_KEY` is set and “Auto-save final turns to memory” is enabled, finalized turns can be stored in your knowledge base.
+
+---
+
+## 🧠 Personalization & Knowledge Base (Supermemory)
+
+If you add `SUPERMEMORY_API_KEY`, the `Customize` panel unlocks:
+- **Role presets** (Meeting Assistant, Technical Expert, etc) + custom role prompt
+- **Text context + user facts** (persistent local + synced to LLM prompt)
+- **“About You”** entries (text or file) that influence responses
+- **Knowledge base**: upload documents, add URLs, add notes
+- **Integrations**: connect and sync Notion / Google Drive / OneDrive via Supermemory
+
+Without `SUPERMEMORY_API_KEY`, the app still works — personalization features are simply disabled.
 
 ---
 
@@ -294,18 +355,21 @@ npm rebuild sharp
 
 ### Window Not Visible
 
-Press `Cmd+B` (macOS) or `Ctrl+B` (Windows) to toggle visibility. The window might be hidden or off-screen.
+Press `Cmd/Ctrl + Shift + Space` to center and show the overlay, or `Cmd/Ctrl + B` to toggle visibility. The window might be hidden or off-screen.
 
 ### API Errors
 
-1. Verify your `GROQ_API_KEY` in `.env` is correct
-2. Check you have API credits at [Groq Console](https://console.groq.com/)
+1. Verify your `.env` values are set and correct:
+   - `GROQ_API_KEY` (required for all AI features)
+   - `DEEPGRAM_API_KEY` (required for Call Assist)
+   - `SUPERMEMORY_API_KEY` (required for Customize/Knowledge Base)
+2. Check you have API credits/permissions in the respective consoles
 3. Ensure you have internet connectivity
 
 ### Closing the App
 
-- Press `Cmd+Q` (macOS) or `Ctrl+Q` (Windows/Linux) to quit
-- Or use Activity Monitor (macOS) / Task Manager (Windows) to force close
+- **macOS:** Press `Cmd+Q` (standard app shortcut) or use the tray/menu bar icon → Quit
+- **Windows/Linux:** Use the tray icon → Quit or click the red power icon in the top bar; use Task Manager to force close if needed
 
 ---
 
@@ -325,6 +389,16 @@ Press `Cmd+B` (macOS) or `Ctrl+B` (Windows) to toggle visibility. The window mig
 - Chat with AI about anything you see on screen
 - Maintains conversation context
 - Ask follow-up questions for deeper insights
+
+### **Call Assist (Live Captions + Suggestions)**
+- Live transcription via Deepgram (mic + optional system audio)
+- Auto-suggests a reply to “their” turns (toggleable)
+- Optional auto-save of finalized turns into Supermemory
+
+### **Personal Knowledge Base (Optional)**
+- Upload documents and add notes/URLs as a knowledge base (Supermemory)
+- Connect Notion / Google Drive / OneDrive via Supermemory
+- Ground responses in your own materials when available
 
 ### **Debug Mode**
 - Take additional screenshots after getting a solution
@@ -380,6 +454,11 @@ This project welcomes contributions!
 ---
 
 **Star this repo if Clueless helps you succeed in meetings, interviews, or presentations!**
+
+## Authors
+
+- Aakash Harish
+- Ameya Lambat
 
 ### Tags
 

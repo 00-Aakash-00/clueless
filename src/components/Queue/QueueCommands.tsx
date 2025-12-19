@@ -4,6 +4,7 @@ import { IoLogOutOutline } from "react-icons/io5";
 interface QueueCommandsProps {
 	screenshots: Array<{ path: string; preview: string }>;
 	onChatToggle: () => void;
+	onCallAssistToggle: () => void;
 	onSettingsToggle: () => void;
 	onCustomizeToggle: () => void;
 	onHelpToggle: () => void;
@@ -12,6 +13,7 @@ interface QueueCommandsProps {
 const QueueCommands: React.FC<QueueCommandsProps> = ({
 	screenshots,
 	onChatToggle,
+	onCallAssistToggle,
 	onSettingsToggle,
 	onCustomizeToggle,
 	onHelpToggle,
@@ -55,6 +57,17 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
 						type="button"
 					>
 						Chat
+					</button>
+				</div>
+
+				{/* Call Assist Button */}
+				<div className="flex items-center gap-2">
+					<button
+						className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-2 py-1 text-[11px] leading-none text-white/70 flex items-center gap-1"
+						onClick={onCallAssistToggle}
+						type="button"
+					>
+						Call
 					</button>
 				</div>
 

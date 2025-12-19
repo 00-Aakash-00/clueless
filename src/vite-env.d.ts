@@ -132,17 +132,73 @@ declare global {
 		provider: string;
 	}
 
-	interface ConnectionDocument {
-		id: string;
-		status: string;
-		type: string;
-		title?: string | null;
-		summary?: string | null;
-		createdAt?: string | null;
-		updatedAt?: string | null;
-	}
+		interface ConnectionDocument {
+			id: string;
+			status: string;
+			type: string;
+			title?: string | null;
+			summary?: string | null;
+			createdAt?: string | null;
+			updatedAt?: string | null;
+		}
 
-	interface ElectronAPI {
+		// Call Assist (Deepgram)
+		interface CallAssistSessionInfo {
+			sessionId: string;
+			recordingPath: string;
+			startedAt: number;
+		}
+
+		type CallAssistStatusEvent =
+			| { sessionId: string; state: "idle" }
+			| { sessionId: string; state: "connecting" }
+			| { sessionId: string; state: "open" }
+			| { sessionId: string; state: "closing" }
+			| { sessionId: string; state: "closed"; code?: number; reason?: string }
+			| { sessionId: string; state: "error"; message: string };
+
+		interface CallAssistCaptionEvent {
+			sessionId: string;
+			channelIndex: number;
+			speakerLabel: string;
+			text: string;
+		}
+
+		interface CallAssistUtteranceEvent {
+			sessionId: string;
+			utteranceId: string;
+			channelIndex: number;
+			speakerId: number | null;
+			speakerLabel: string;
+			text: string;
+			startMs: number | null;
+			endMs: number | null;
+		}
+
+		interface CallAssistMetadataEvent {
+			sessionId: string;
+			requestId?: string;
+			channels?: number;
+			duration?: number;
+		}
+
+		interface CallAssistSuggestionEvent {
+			sessionId: string;
+			utteranceId: string;
+			suggestion: string;
+		}
+
+		interface CallAssistSummaryEvent {
+			sessionId: string;
+			summary: string;
+		}
+
+		interface CallAssistErrorEvent {
+			sessionId: string;
+			message: string;
+		}
+
+		interface ElectronAPI {
 		updateContentDimensions: (dimensions: {
 			width: number;
 			height: number;
@@ -178,6 +234,12 @@ declare global {
 			path: string,
 		) => Promise<{ text: string; timestamp: number }>;
 		groqChat: (message: string) => Promise<string>;
+		resetChatHistory: () => Promise<{ success: boolean; error?: string }>;
+		liveWhatDoISay: () => Promise<{
+			success: boolean;
+			data?: string;
+			error?: string;
+		}>;
 		quitApp: () => Promise<void>;
 
 		// LLM Model Management
@@ -227,6 +289,13 @@ declare global {
 			data?: { results: unknown[]; total: number };
 			error?: string;
 		}>;
+		getDocumentStatus: (
+			documentId: string,
+		) => Promise<{
+			success: boolean;
+			data?: { id: string; status: string; title?: string | null };
+			error?: string;
+		}>;
 		deleteDocument: (
 			documentId: string,
 		) => Promise<{ success: boolean; error?: string }>;
@@ -235,6 +304,7 @@ declare global {
 			static: string[];
 			dynamic: string[];
 		} | null>;
+		getSupermemoryContainerTag: () => Promise<string | null>;
 		resetCustomization: () => Promise<{ success: boolean; error?: string }>;
 
 		// About You APIs
@@ -325,10 +395,61 @@ declare global {
 			data?: ConnectionDocument[];
 			error?: string;
 		}>;
-		openExternalUrl: (
-			url: string,
-		) => Promise<{ success: boolean; error?: string }>;
-	}
+			openExternalUrl: (
+				url: string,
+			) => Promise<{ success: boolean; error?: string }>;
+
+			// Call Assist (Deepgram)
+			callAssistStart: (payload: {
+				mode: "multichannel" | "diarize";
+				sampleRate: number;
+				channels: number;
+				model?: string;
+				language?: string;
+				endpointingMs?: number;
+				utteranceEndMs?: number;
+				keywords?: string[];
+				keyterms?: string[];
+				youChannelIndex?: number;
+				diarizeYouSpeakerId?: number | null;
+				autoSaveToMemory?: boolean;
+				autoSuggest?: boolean;
+				autoSummary?: boolean;
+			}) => Promise<{
+				success: boolean;
+				data?: CallAssistSessionInfo;
+				error?: string;
+			}>;
+			callAssistStop: (
+				sessionId: string,
+			) => Promise<{ success: boolean; error?: string }>;
+			callAssistGetActiveSession: () => Promise<CallAssistSessionInfo | null>;
+			callAssistSendAudioFrame: (payload: {
+				sessionId: string;
+				pcm: ArrayBuffer;
+			}) => void;
+			onCallAssistStatus: (callback: (evt: CallAssistStatusEvent) => void) => () => void;
+			onCallAssistCaption: (callback: (evt: CallAssistCaptionEvent) => void) => () => void;
+			onCallAssistUtterance: (
+				callback: (evt: CallAssistUtteranceEvent) => void,
+			) => () => void;
+			onCallAssistMetadata: (
+				callback: (evt: CallAssistMetadataEvent) => void,
+			) => () => void;
+			onCallAssistSuggestion: (
+				callback: (evt: CallAssistSuggestionEvent) => void,
+			) => () => void;
+			onCallAssistSummary: (
+				callback: (evt: CallAssistSummaryEvent) => void,
+			) => () => void;
+			onCallAssistError: (callback: (evt: CallAssistErrorEvent) => void) => () => void;
+			onCallAssistStarted: (
+				callback: (info: CallAssistSessionInfo) => void,
+			) => () => void;
+			onCallAssistStopped: (
+				callback: (evt: { sessionId: string }) => void,
+			) => () => void;
+		}
 
 	interface Window {
 		electronAPI: ElectronAPI;

@@ -9,34 +9,56 @@ export class ShortcutsHelper {
 	}
 
 	public registerGlobalShortcuts(): void {
+		const register = (
+			accelerator: string,
+			callback: () => void | Promise<void>,
+		): boolean => {
+			globalShortcut.register(accelerator, callback);
+			const registered = globalShortcut.isRegistered(accelerator);
+			if (!registered) {
+				console.warn(
+					`[ShortcutsHelper] Failed to register global shortcut: ${accelerator}`,
+				);
+			}
+			return registered;
+		};
+
 		// Add global shortcut to show/center window
-		globalShortcut.register("CommandOrControl+Shift+Space", () => {
+		register("CommandOrControl+Shift+Space", () => {
 			console.log("Show/Center window shortcut pressed...");
 			this.appState.centerAndShowWindow();
 		});
 
-		globalShortcut.register("CommandOrControl+H", async () => {
+		const screenshotAccelerator =
+			process.platform === "darwin"
+				? "CommandOrControl+Shift+H"
+				: "CommandOrControl+H";
+		register(screenshotAccelerator, async () => {
 			const mainWindow = this.appState.getMainWindow();
-			if (mainWindow) {
-				console.log("Taking screenshot...");
-				try {
-					const screenshotPath = await this.appState.takeScreenshot();
-					const preview = await this.appState.getImagePreview(screenshotPath);
-					mainWindow.webContents.send("screenshot-taken", {
-						path: screenshotPath,
-						preview,
-					});
-				} catch (error) {
-					console.error("Error capturing screenshot:", error);
-				}
+			if (!mainWindow || mainWindow.isDestroyed()) return;
+
+			console.log("Taking screenshot...");
+			try {
+				const screenshotPath = await this.appState.takeScreenshot();
+				const preview = await this.appState.getImagePreview(screenshotPath);
+				mainWindow.webContents.send("screenshot-taken", {
+					path: screenshotPath,
+					preview,
+				});
+			} catch (error) {
+				console.error("Error capturing screenshot:", error);
 			}
 		});
 
-		globalShortcut.register("CommandOrControl+Enter", async () => {
+		register("CommandOrControl+Enter", async () => {
+			// Make results visible even if the window is currently hidden.
+			if (!this.appState.isVisible()) {
+				this.appState.showMainWindow();
+			}
 			await this.appState.processingHelper.processScreenshots();
 		});
 
-		globalShortcut.register("CommandOrControl+R", () => {
+		register("CommandOrControl+R", () => {
 			console.log(
 				"Command + R pressed. Canceling requests and resetting queues...",
 			);
@@ -60,25 +82,25 @@ export class ShortcutsHelper {
 		});
 
 		// New shortcuts for moving the window
-		globalShortcut.register("CommandOrControl+Left", () => {
+		register("CommandOrControl+Left", () => {
 			console.log("Command/Ctrl + Left pressed. Moving window left.");
 			this.appState.moveWindowLeft();
 		});
 
-		globalShortcut.register("CommandOrControl+Right", () => {
+		register("CommandOrControl+Right", () => {
 			console.log("Command/Ctrl + Right pressed. Moving window right.");
 			this.appState.moveWindowRight();
 		});
-		globalShortcut.register("CommandOrControl+Down", () => {
+		register("CommandOrControl+Down", () => {
 			console.log("Command/Ctrl + down pressed. Moving window down.");
 			this.appState.moveWindowDown();
 		});
-		globalShortcut.register("CommandOrControl+Up", () => {
+		register("CommandOrControl+Up", () => {
 			console.log("Command/Ctrl + Up pressed. Moving window Up.");
 			this.appState.moveWindowUp();
 		});
 
-		globalShortcut.register("CommandOrControl+B", () => {
+		register("CommandOrControl+B", () => {
 			this.appState.toggleMainWindow();
 			// If window exists and we're showing it, bring it to front
 			const mainWindow = this.appState.getMainWindow();
@@ -96,7 +118,7 @@ export class ShortcutsHelper {
 			}
 		});
 
-		globalShortcut.register("CommandOrControl+K", () => {
+		register("CommandOrControl+K", () => {
 			const mainWindow = this.appState.getMainWindow();
 			if (mainWindow && !mainWindow.isDestroyed()) {
 				// Show window first if hidden

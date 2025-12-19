@@ -1,6 +1,7 @@
 import { app, type BrowserWindow, Menu, nativeImage, Tray } from "electron";
 import { initializeIpcHandlers } from "./ipcHandlers";
 import { ProcessingHelper } from "./ProcessingHelper";
+import { CallAssistManager } from "./CallAssistManager";
 import { ScreenshotHelper } from "./ScreenshotHelper";
 import { ShortcutsHelper } from "./shortcuts";
 import { WindowHelper } from "./WindowHelper";
@@ -12,6 +13,7 @@ export class AppState {
 	private screenshotHelper: ScreenshotHelper;
 	public shortcutsHelper: ShortcutsHelper;
 	public processingHelper: ProcessingHelper;
+	public callAssistManager: CallAssistManager;
 	private tray: Tray | null = null;
 
 	// View management
@@ -69,6 +71,9 @@ export class AppState {
 
 		// Initialize ProcessingHelper
 		this.processingHelper = new ProcessingHelper(this);
+
+		// Initialize Call Assist Manager (Deepgram live transcription)
+		this.callAssistManager = new CallAssistManager(this);
 
 		// Initialize ShortcutsHelper
 		this.shortcutsHelper = new ShortcutsHelper(this);
@@ -204,9 +209,14 @@ export class AppState {
 	public async takeScreenshot(): Promise<string> {
 		if (!this.getMainWindow()) throw new Error("No main window available");
 
+		const wasVisible = this.isVisible();
 		const screenshotPath = await this.screenshotHelper.takeScreenshot(
-			() => this.hideMainWindow(),
-			() => this.showMainWindow(),
+			() => {
+				if (wasVisible) this.hideMainWindow();
+			},
+			() => {
+				if (wasVisible) this.showMainWindow();
+			},
 		);
 
 		return screenshotPath;
@@ -274,7 +284,10 @@ export class AppState {
 				type: "separator",
 			},
 			{
-				label: "Take Screenshot (Cmd+H)",
+				label:
+					process.platform === "darwin"
+						? "Take Screenshot (Cmd+Shift+H)"
+						: "Take Screenshot (Ctrl+H)",
 				click: async () => {
 					try {
 						const screenshotPath = await this.takeScreenshot();
@@ -303,7 +316,11 @@ export class AppState {
 			},
 		]);
 
-		this.tray.setToolTip("Clueless - Press Cmd+Shift+Space to show");
+		this.tray.setToolTip(
+			process.platform === "darwin"
+				? "Clueless - Press Cmd+Shift+Space to show"
+				: "Clueless - Press Ctrl+Shift+Space to show",
+		);
 		this.tray.setContextMenu(contextMenu);
 
 		// Set a title for macOS (will appear in menu bar)

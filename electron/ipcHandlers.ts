@@ -130,6 +130,97 @@ export function initializeIpcHandlers(appState: AppState): void {
 		}
 	});
 
+	ipcMain.handle("reset-chat-history", async () => {
+		try {
+			appState.processingHelper.resetConversation();
+			return { success: true };
+		} catch (error: unknown) {
+			const message = error instanceof Error ? error.message : String(error);
+			console.error("Error in reset-chat-history handler:", error);
+			return { success: false, error: message };
+		}
+	});
+
+	ipcMain.handle("live-what-do-i-say", async () => {
+		try {
+			const response = await appState.processingHelper.generateLiveWhatDoISay();
+			return { success: true, data: response };
+		} catch (error: unknown) {
+			const message = error instanceof Error ? error.message : String(error);
+			console.error("Error in live-what-do-i-say handler:", error);
+			return { success: false, error: message };
+		}
+	});
+
+	ipcMain.handle("call-assist-get-active-session", async () => {
+		try {
+			return appState.callAssistManager.getActiveSession();
+		} catch (error) {
+			console.error("Error in call-assist-get-active-session handler:", error);
+			return null;
+		}
+	});
+
+	ipcMain.handle(
+		"call-assist-start",
+		async (
+			_event,
+			params: {
+				mode: "multichannel" | "diarize";
+				sampleRate: number;
+				channels: number;
+				model?: string;
+				language?: string;
+				endpointingMs?: number;
+				utteranceEndMs?: number;
+				keywords?: string[];
+				keyterms?: string[];
+				youChannelIndex?: number;
+				diarizeYouSpeakerId?: number | null;
+				autoSaveToMemory?: boolean;
+				autoSuggest?: boolean;
+				autoSummary?: boolean;
+			},
+		) => {
+			try {
+				const info = await appState.callAssistManager.start(params);
+				return { success: true, data: info };
+			} catch (error: unknown) {
+				const message = error instanceof Error ? error.message : String(error);
+				console.error("Error in call-assist-start handler:", error);
+				return { success: false, error: message };
+			}
+		},
+	);
+
+	ipcMain.handle("call-assist-stop", async (_event, sessionId: string) => {
+		try {
+			await appState.callAssistManager.stop(sessionId);
+			return { success: true };
+		} catch (error: unknown) {
+			const message = error instanceof Error ? error.message : String(error);
+			console.error("Error in call-assist-stop handler:", error);
+			return { success: false, error: message };
+		}
+	});
+
+	ipcMain.on(
+		"call-assist-audio-frame",
+		(_event, payload: { sessionId: string; pcm: ArrayBuffer }) => {
+			try {
+				if (!payload?.sessionId || typeof payload.sessionId !== "string") return;
+				const bytes = coerceToUint8Array(payload.pcm);
+				if (!bytes || bytes.length === 0) return;
+				appState.callAssistManager.handleAudioFrame({
+					sessionId: payload.sessionId,
+					pcm: Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+				});
+			} catch (error) {
+				console.error("Error in call-assist-audio-frame handler:", error);
+			}
+		},
+	);
+
 	ipcMain.handle("quit-app", () => {
 		app.quit();
 	});
@@ -395,6 +486,15 @@ export function initializeIpcHandlers(appState: AppState): void {
 		}
 	});
 
+	ipcMain.handle("get-supermemory-container-tag", async () => {
+		try {
+			return appState.processingHelper.getSupermemoryContainerTag();
+		} catch (error: unknown) {
+			console.error("Error getting Supermemory container tag:", error);
+			return null;
+		}
+	});
+
 	ipcMain.handle("reset-customization", async () => {
 		try {
 			appState.processingHelper.resetCustomization();
@@ -419,6 +519,24 @@ export function initializeIpcHandlers(appState: AppState): void {
 			return { success: true, data: result };
 		} catch (error: unknown) {
 			console.error("Error getting knowledge base overview:", error);
+			const message = error instanceof Error ? error.message : "Unknown error occurred";
+			return { success: false, error: message };
+		}
+	});
+
+	ipcMain.handle("get-document-status", async (_event, documentId: unknown) => {
+		try {
+			if (!appState.processingHelper.getSupermemoryHelper()) {
+				return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			}
+			if (typeof documentId !== "string" || !documentId.trim()) {
+				return { success: false, error: "Document id is required" };
+			}
+			const result = await appState.processingHelper.getDocumentStatus(documentId);
+			if (!result) return { success: false, error: PERSONALIZATION_UNAVAILABLE };
+			return { success: true, data: result };
+		} catch (error: unknown) {
+			console.error("Error getting document status:", error);
 			const message = error instanceof Error ? error.message : "Unknown error occurred";
 			return { success: false, error: message };
 		}

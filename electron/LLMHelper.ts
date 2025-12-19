@@ -117,13 +117,17 @@ Response style:
 		userMessage?: string;
 		historyMessages?: number;
 		task?: "chat" | "solution" | "other";
+		memoryContextChars?: number;
 	}): Exclude<TextModel, "auto"> {
 		if (this.textModel !== "auto") return this.textModel;
 
 		const message = params?.userMessage?.trim() ?? "";
 		const task = params?.task ?? "other";
 		const historyMessages = params?.historyMessages ?? 0;
-		const memoryChars = this.memoryContext?.length ?? 0;
+		const memoryChars =
+			typeof params?.memoryContextChars === "number"
+				? params.memoryContextChars
+				: this.memoryContext?.length ?? 0;
 
 		let score = 0;
 		if (task === "solution") score += 3;
@@ -179,24 +183,33 @@ Response style:
 		console.log(`[LLMHelper] Memory context set (${context.length} chars)`);
 	}
 
-	private buildSystemMessages(): Array<{ role: "system"; content: string }> {
+	private buildSystemMessagesWithOverrides(params?: {
+		systemPrompt?: string;
+		additionalContext?: string;
+		memoryContext?: string;
+	}): Array<{ role: "system"; content: string }> {
+		const systemPrompt =
+			params?.systemPrompt ?? (this.customSystemPrompt || this.defaultSystemPrompt);
+		const additionalContext = params?.additionalContext ?? this.additionalContext;
+		const memoryContext = params?.memoryContext ?? this.memoryContext;
+
 		const messages: Array<{ role: "system"; content: string }> = [];
 		messages.push({
 			role: "system",
-			content: this.customSystemPrompt || this.defaultSystemPrompt,
+			content: systemPrompt,
 		});
 
-		if (this.additionalContext) {
+		if (additionalContext) {
 			messages.push({
 				role: "system",
-				content: `User Context:\n${this.additionalContext}`,
+				content: `User Context:\n${additionalContext}`,
 			});
 		}
 
-		if (this.memoryContext) {
+		if (memoryContext) {
 			messages.push({
 				role: "system",
-				content: `Knowledge Base Excerpts:\n${this.memoryContext}`,
+				content: `Retrieved Context:\n${memoryContext}`,
 			});
 		}
 
@@ -204,18 +217,22 @@ Response style:
 		console.log(`[LLMHelper]   - System messages: ${messages.length}`);
 		console.log(`[LLMHelper]   - Has custom prompt: ${!!this.customSystemPrompt}`);
 		console.log(
-			`[LLMHelper]   - Has additional context: ${!!this.additionalContext} (${this.additionalContext.length} chars)`,
+			`[LLMHelper]   - Has additional context: ${!!additionalContext} (${additionalContext?.length ?? 0} chars)`,
 		);
 		console.log(
-			`[LLMHelper]   - Has memory context: ${!!this.memoryContext} (${this.memoryContext.length} chars)`,
+			`[LLMHelper]   - Has memory context: ${!!memoryContext} (${memoryContext?.length ?? 0} chars)`,
 		);
-		if (this.memoryContext) {
+		if (memoryContext) {
 			console.log(
-				`[LLMHelper]   - Memory context preview: "${this.memoryContext.substring(0, 100)}..."`,
+				`[LLMHelper]   - Memory context preview: "${memoryContext.substring(0, 100)}..."`,
 			);
 		}
 
 		return messages;
+	}
+
+	private buildSystemMessages(): Array<{ role: "system"; content: string }> {
+		return this.buildSystemMessagesWithOverrides();
 	}
 
 	// Reset all customizations to defaults
@@ -599,11 +616,11 @@ Response style:
 			}
 			messages.push({ role: "user", content: message });
 
-			const model = this.resolveTextModelForRequest({
-				task: "chat",
-				userMessage: message,
-				historyMessages: history?.length ?? 0,
-			});
+				const model = this.resolveTextModelForRequest({
+					task: "chat",
+					userMessage: message,
+					historyMessages: history?.length ?? 0,
+				});
 			const response = await this.callGroq(model, messages, {
 				temperature: 0.7,
 				signal,
@@ -613,6 +630,45 @@ Response style:
 			console.error("[LLMHelper] Error in chat:", error);
 			throw error;
 		}
+	}
+
+	public async chatWithOverrides(params: {
+		message: string;
+		history?: Array<{ role: "user" | "assistant"; content: string }>;
+		overrides?: {
+			systemPrompt?: string;
+			additionalContext?: string;
+			memoryContext?: string;
+		};
+		temperature?: number;
+		task?: "chat" | "solution" | "other";
+		signal?: AbortSignal;
+	}): Promise<string> {
+		const message = params.message.trim();
+		if (!message) return "";
+
+		const history = params.history ?? [];
+		const overrides = params.overrides ?? {};
+
+		const messages: Array<{ role: string; content: string }> = [
+			...this.buildSystemMessagesWithOverrides(overrides),
+		];
+		for (const m of history) {
+			if (m?.content) messages.push({ role: m.role, content: m.content });
+		}
+		messages.push({ role: "user", content: message });
+
+		const model = this.resolveTextModelForRequest({
+			task: params.task ?? "other",
+			userMessage: message,
+			historyMessages: history.length,
+			memoryContextChars: overrides.memoryContext?.length ?? 0,
+		});
+
+		return await this.callGroq(model, messages, {
+			temperature: typeof params.temperature === "number" ? params.temperature : 0.7,
+			signal: params.signal,
+		});
 	}
 
 	public getCurrentModel(): string {

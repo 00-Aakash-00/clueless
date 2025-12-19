@@ -81,6 +81,7 @@ export type MemorySearchOptions = {
 	rerank?: boolean;
 	rewriteQuery?: boolean;
 	include?: MemorySearchIncludeOptions;
+	filters?: unknown;
 	/**
 	 * Overrides the default container tag for this helper. Use `null` to omit the filter.
 	 */
@@ -266,7 +267,7 @@ export interface CustomizeConfig {
 export class SupermemoryHelper {
 	private apiKey: string;
 	private readonly baseUrl = "https://api.supermemory.ai";
-	private readonly containerTag = "clueless_user_default";
+	private readonly containerTag: string;
 	private readonly aboutYouFilePath: string;
 	private readonly configFilePath: string;
 	private readonly requestTimeoutMs = 30_000;
@@ -286,15 +287,43 @@ export class SupermemoryHelper {
 		// Set up persistence paths
 		this.configFilePath = path.join(app.getPath("userData"), "customize-config.json");
 		this.aboutYouFilePath = path.join(app.getPath("userData"), "about-you.json");
+		this.containerTag = this.resolveContainerTag();
 
 		// Load persisted config + About You data on startup
 		this.loadConfigFromDisk();
 		this.loadAboutYouFromDisk();
-		console.log("[SupermemoryHelper] Initialized with Supermemory API");
+		console.log(
+			`[SupermemoryHelper] Initialized with Supermemory API (containerTag=${this.containerTag})`,
+		);
 	}
 
 	public getDefaultContainerTag(): string {
 		return this.containerTag;
+	}
+
+	private static sanitizeContainerTag(input: string): string {
+		const cleaned = input.trim().replace(/[^a-zA-Z0-9_-]/g, "_");
+		return cleaned.slice(0, 100);
+	}
+
+	private buildDefaultContainerTag(): string {
+		const nameSeed =
+			SupermemoryHelper.sanitizeContainerTag(app.getName().toLowerCase()) || "app";
+		const hash = createHash("sha256")
+			.update(`${app.getPath("userData")}|${app.getAppPath()}`)
+			.digest("hex")
+			.slice(0, 16);
+		return SupermemoryHelper.sanitizeContainerTag(`${nameSeed}_${hash}`);
+	}
+
+	private resolveContainerTag(): string {
+		const envTag = process.env.SUPERMEMORY_CONTAINER_TAG;
+		const trimmedEnv = typeof envTag === "string" ? envTag.trim() : "";
+		if (trimmedEnv) {
+			const sanitized = SupermemoryHelper.sanitizeContainerTag(trimmedEnv);
+			if (sanitized) return sanitized;
+		}
+		return this.buildDefaultContainerTag();
 	}
 
 	private async requestText(
@@ -686,19 +715,20 @@ export class SupermemoryHelper {
 		// The `form-data` package is not compatible with undici's fetch and results in "[object FormData]" uploads.
 		const formData = new FormData();
 		const fileBuffer = this.toArrayBuffer(bytes);
-		formData.append(
-			"file",
-			new Blob([fileBuffer], { type: resolvedMimeType }),
-			fileName,
-		);
-		const effectiveContainerTags =
-			options?.containerTags === undefined ? [this.containerTag] : options.containerTags;
-		// Supermemory APIs have used both `containerTag` and `containerTags` in different versions; send both for compatibility.
-		const containerTagSingle = effectiveContainerTags?.[0];
-		if (containerTagSingle) formData.append("containerTag", containerTagSingle);
-		if (effectiveContainerTags && effectiveContainerTags.length > 0) {
-			formData.append("containerTags", JSON.stringify(effectiveContainerTags));
-		}
+			formData.append(
+				"file",
+				new Blob([fileBuffer], { type: resolvedMimeType }),
+				fileName,
+			);
+			const effectiveContainerTags =
+				options?.containerTags === undefined ? [this.containerTag] : options.containerTags;
+			if (effectiveContainerTags && effectiveContainerTags.length > 0) {
+				if (effectiveContainerTags.length === 1) {
+					formData.append("containerTags", effectiveContainerTags[0] ?? "");
+				} else {
+					formData.append("containerTags", JSON.stringify(effectiveContainerTags));
+				}
+			}
 		const normalizedMimeType = resolvedMimeType.toLowerCase();
 		if (normalizedMimeType.startsWith("image/")) {
 			formData.append("fileType", "image");
@@ -844,23 +874,25 @@ export class SupermemoryHelper {
 		const threshold = options.threshold ?? 0.6;
 		const rerank = options.rerank ?? false;
 		const rewriteQuery = options.rewriteQuery ?? false;
-		const include = options.include;
-		const containerTag =
-			options.containerTag === undefined ? this.containerTag : options.containerTag;
+			const include = options.include;
+			const filters = options.filters;
+			const containerTag =
+				options.containerTag === undefined ? this.containerTag : options.containerTag;
 
 		console.log(
 			`[SupermemoryHelper] Searching memories (limit=${limit}, threshold=${threshold}, rerank=${rerank}, rewriteQuery=${rewriteQuery}, containerTag=${containerTag ?? "none"}) q="${query.substring(0, 80)}${query.length > 80 ? "..." : ""}"`,
 		);
 		try {
-			const body: Record<string, unknown> = {
-				q: query,
-				limit,
-				threshold,
-				rerank,
-				rewriteQuery,
-			};
-			if (containerTag) body.containerTag = containerTag;
-			if (include) body.include = include;
+				const body: Record<string, unknown> = {
+					q: query,
+					limit,
+					threshold,
+					rerank,
+					rewriteQuery,
+				};
+				if (containerTag) body.containerTag = containerTag;
+				if (include) body.include = include;
+				if (filters) body.filters = filters;
 
 			const data = await this.requestJson<SearchResponse>(
 				"/v4/search",
@@ -1036,6 +1068,70 @@ export class SupermemoryHelper {
 		return {
 			documents,
 			totalCount,
+		};
+	}
+
+	public async getDocument(documentId: string): Promise<ListedDocument> {
+		const id = documentId.trim();
+		if (!id) throw new Error("Document id is required");
+
+		const raw = await this.requestJson<Record<string, unknown>>(
+			`/v3/documents/${encodeURIComponent(id)}`,
+			{
+				method: "GET",
+				headers: {
+					Authorization: `Bearer ${this.apiKey}`,
+				},
+			},
+			200,
+		);
+
+		const status =
+			typeof raw.status === "string"
+				? raw.status
+				: typeof raw.documentStatus === "string"
+					? raw.documentStatus
+					: null;
+
+		const metadata =
+			raw.metadata && typeof raw.metadata === "object" && !Array.isArray(raw.metadata)
+				? (raw.metadata as Record<string, unknown>)
+				: null;
+
+		const containerTags =
+			Array.isArray(raw.containerTags) && raw.containerTags.every((t) => typeof t === "string")
+				? (raw.containerTags as string[])
+				: Array.isArray(raw.container_tags) &&
+						raw.container_tags.every((t) => typeof t === "string")
+					? (raw.container_tags as string[])
+					: null;
+
+		const title =
+			typeof raw.title === "string"
+				? raw.title
+				: typeof metadata?.filename === "string"
+					? metadata.filename
+					: null;
+
+		const type = typeof raw.type === "string" ? raw.type : null;
+		const summary = typeof raw.summary === "string" ? raw.summary : null;
+		const connectionId = typeof raw.connectionId === "string" ? raw.connectionId : null;
+		const customId = typeof raw.customId === "string" ? raw.customId : null;
+		const createdAt = typeof raw.createdAt === "string" ? raw.createdAt : null;
+		const updatedAt = typeof raw.updatedAt === "string" ? raw.updatedAt : null;
+
+		return {
+			id: typeof raw.id === "string" ? raw.id : id,
+			status,
+			title,
+			type,
+			summary,
+			metadata,
+			containerTags,
+			connectionId,
+			customId,
+			createdAt,
+			updatedAt,
 		};
 	}
 

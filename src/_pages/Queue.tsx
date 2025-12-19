@@ -1,8 +1,9 @@
 import type React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "react-query";
 import QueueCommands from "../components/Queue/QueueCommands";
 import ScreenshotQueue from "../components/Queue/ScreenshotQueue";
+import { CallAssistPanel } from "../components/ui/CallAssistPanel";
 import CustomizePanel from "../components/ui/CustomizePanel";
 import { HelpPanel } from "../components/ui/HelpModal";
 import MarkdownRenderer from "../components/ui/MarkdownRenderer";
@@ -38,7 +39,11 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 	const [chatLoading, setChatLoading] = useState(false);
 	const [isChatOpen, setIsChatOpen] = useState(false);
 	const chatInputRef = useRef<HTMLInputElement>(null);
+	const [activeCallSession, setActiveCallSession] = useState<CallAssistSessionInfo | null>(
+		null,
+	);
 
+	const [isCallAssistOpen, setIsCallAssistOpen] = useState(false);
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 	const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
 	const [isHelpOpen, setIsHelpOpen] = useState(false);
@@ -46,6 +51,12 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 		provider: string;
 		model: string;
 	}>({ provider: "groq", model: "openai/gpt-oss-20b" });
+	const screenshotShortcut = useMemo(() => {
+		const isMac =
+			typeof navigator !== "undefined" &&
+			/Mac|iPhone|iPad|iPod/.test(navigator.platform);
+		return isMac ? "Cmd+Shift+H" : "Ctrl+H";
+	}, []);
 
 	const barRef = useRef<HTMLDivElement>(null);
 
@@ -100,16 +111,68 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 	};
 
 	const handleChatSend = async () => {
-		if (!chatInput.trim()) return;
-		setChatMessages((msgs) => [...msgs, { role: "user", text: chatInput }]);
+		const trimmed = chatInput.trim();
+		if (!trimmed) return;
+
+		if (trimmed === "/clear") {
+			void handleClearChat();
+			return;
+		}
+		setChatMessages((msgs) => [...msgs, { role: "user", text: trimmed }]);
 		setChatLoading(true);
 		setChatInput("");
 		try {
-			const response = await window.electronAPI.groqChat(chatInput);
+			const response = await window.electronAPI.groqChat(trimmed);
 			setChatMessages((msgs) => [
 				...msgs,
 				{ role: "assistant", text: String(response) },
 			]);
+		} catch (err) {
+			setChatMessages((msgs) => [
+				...msgs,
+				{ role: "assistant", text: `Error: ${String(err)}` },
+			]);
+		} finally {
+			setChatLoading(false);
+			chatInputRef.current?.focus();
+		}
+	};
+
+	const handleClearChat = async () => {
+		try {
+			await window.electronAPI.resetChatHistory();
+		} catch {
+			// ignore
+		}
+		setChatMessages([]);
+		setChatInput("");
+		setChatLoading(false);
+		showToast("Cleared", "Chat history cleared.", "neutral");
+	};
+
+	const handleWhatDoISay = async () => {
+		setChatMessages((msgs) => [
+			...msgs,
+			{ role: "user", text: "What should I say next?" },
+		]);
+		setChatLoading(true);
+		try {
+			const result = await window.electronAPI.liveWhatDoISay();
+			const reply = result.data;
+			if (result.success && typeof reply === "string") {
+				setChatMessages((msgs) => [
+					...msgs,
+					{ role: "assistant", text: reply },
+				]);
+			} else {
+				setChatMessages((msgs) => [
+					...msgs,
+					{
+						role: "assistant",
+						text: `Error: ${result.error || "Unable to generate a live reply"}`,
+					},
+				]);
+			}
 		} catch (err) {
 			setChatMessages((msgs) => [
 				...msgs,
@@ -153,6 +216,7 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 		updateDimensions();
 
 		const cleanupFunctions = [
+			window.electronAPI.onScreenshotTaken(() => refetch()),
 			window.electronAPI.onResetView(() => refetch()),
 			window.electronAPI.onSolutionError((error: string) => {
 				showToast(
@@ -186,6 +250,29 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 			}
 		};
 	}, [refetch, setView, showToast]);
+
+	useEffect(() => {
+		let cancelled = false;
+		window.electronAPI
+			.callAssistGetActiveSession()
+			.then((session) => {
+				if (cancelled) return;
+				setActiveCallSession(session);
+			})
+			.catch(() => {
+				// ignore
+			});
+
+		const unsubs = [
+			window.electronAPI.onCallAssistStarted((info) => setActiveCallSession(info)),
+			window.electronAPI.onCallAssistStopped(() => setActiveCallSession(null)),
+		];
+
+		return () => {
+			cancelled = true;
+			for (const unsub of unsubs) unsub();
+		};
+	}, []);
 
 	// Seamless screenshot-to-LLM flow
 	useEffect(() => {
@@ -247,36 +334,48 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 		};
 	}, [refetch]);
 
-	const handleChatToggle = () => {
-		setIsChatOpen(!isChatOpen);
-	};
+		const handleChatToggle = () => {
+			setIsChatOpen(!isChatOpen);
+		};
 
-	const handleSettingsToggle = () => {
-		setIsSettingsOpen(!isSettingsOpen);
-		// Close other panels when opening settings
-		if (!isSettingsOpen) {
-			setIsCustomizeOpen(false);
-			setIsHelpOpen(false);
-		}
-	};
+		const handleCallAssistToggle = () => {
+			setIsCallAssistOpen(!isCallAssistOpen);
+			if (!isCallAssistOpen) {
+				setIsSettingsOpen(false);
+				setIsCustomizeOpen(false);
+				setIsHelpOpen(false);
+			}
+		};
 
-	const handleCustomizeToggle = () => {
-		setIsCustomizeOpen(!isCustomizeOpen);
-		// Close other panels when opening customize
-		if (!isCustomizeOpen) {
-			setIsSettingsOpen(false);
-			setIsHelpOpen(false);
-		}
-	};
+		const handleSettingsToggle = () => {
+			setIsSettingsOpen(!isSettingsOpen);
+			// Close other panels when opening settings
+			if (!isSettingsOpen) {
+				setIsCustomizeOpen(false);
+				setIsHelpOpen(false);
+				setIsCallAssistOpen(false);
+			}
+		};
 
-	const handleHelpToggle = () => {
-		setIsHelpOpen(!isHelpOpen);
-		// Close other panels when opening help
-		if (!isHelpOpen) {
-			setIsSettingsOpen(false);
-			setIsCustomizeOpen(false);
-		}
-	};
+		const handleCustomizeToggle = () => {
+			setIsCustomizeOpen(!isCustomizeOpen);
+			// Close other panels when opening customize
+			if (!isCustomizeOpen) {
+				setIsSettingsOpen(false);
+				setIsHelpOpen(false);
+				setIsCallAssistOpen(false);
+			}
+		};
+
+		const handleHelpToggle = () => {
+			setIsHelpOpen(!isHelpOpen);
+			// Close other panels when opening help
+			if (!isHelpOpen) {
+				setIsSettingsOpen(false);
+				setIsCustomizeOpen(false);
+				setIsCallAssistOpen(false);
+			}
+		};
 
 	const handleModelChange = (model: string) => {
 		setCurrentModel({ provider: "groq", model });
@@ -311,38 +410,47 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 						<ToastDescription>{toastMessage.description}</ToastDescription>
 					</Toast>
 					<div className="inline-block">
-						<QueueCommands
-							screenshots={screenshots}
-							onChatToggle={handleChatToggle}
-							onSettingsToggle={handleSettingsToggle}
-							onCustomizeToggle={handleCustomizeToggle}
-							onHelpToggle={handleHelpToggle}
-						/>
+							<QueueCommands
+								screenshots={screenshots}
+								onChatToggle={handleChatToggle}
+								onCallAssistToggle={handleCallAssistToggle}
+								onSettingsToggle={handleSettingsToggle}
+								onCustomizeToggle={handleCustomizeToggle}
+								onHelpToggle={handleHelpToggle}
+							/>
 					</div>
 					{/* Screenshot Queue Display */}
 					{screenshots.length > 0 && (
 						<div className="mt-4">
-							<ScreenshotQueue
-								isLoading={false}
-								screenshots={screenshots}
-								onDeleteScreenshot={handleDeleteScreenshot}
-							/>
-						</div>
-					)}
-					{/* Conditional Settings Interface */}
-					{isSettingsOpen && (
-						<div className="mt-4 w-full mx-auto">
-							<ModelSelector
-								onModelChange={handleModelChange}
-								onChatOpen={() => setIsChatOpen(true)}
-							/>
-						</div>
-					)}
+									<ScreenshotQueue
+										isLoading={false}
+										screenshots={screenshots}
+										onDeleteScreenshot={handleDeleteScreenshot}
+									/>
+								</div>
+							)}
+						{/* Conditional Settings Interface */}
+						{isSettingsOpen && (
+							<div className="mt-4 w-full mx-auto">
+								<ModelSelector
+									onModelChange={handleModelChange}
+									onChatOpen={() => setIsChatOpen(true)}
+									onClearChat={() => void handleClearChat()}
+								/>
+							</div>
+						)}
 
-					{/* Conditional Customize Interface */}
-					{isCustomizeOpen && (
-						<div className="mt-4 w-full mx-auto">
-							<CustomizePanel onClose={() => setIsCustomizeOpen(false)} />
+						{/* Conditional Call Assist Interface */}
+						{isCallAssistOpen && (
+							<div className="mt-4 w-full mx-auto">
+								<CallAssistPanel onClose={() => setIsCallAssistOpen(false)} />
+							</div>
+						)}
+
+						{/* Conditional Customize Interface */}
+						{isCustomizeOpen && (
+							<div className="mt-4 w-full mx-auto">
+								<CustomizePanel onClose={() => setIsCustomizeOpen(false)} />
 						</div>
 					)}
 
@@ -362,7 +470,7 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 										Chat with {currentModel.model}
 										<br />
 										<span className="text-[10px] text-white/40">
-											Take a screenshot (Cmd+H) for automatic analysis
+											Take a screenshot ({screenshotShortcut}) for automatic analysis
 										</span>
 										<br />
 										<span className="text-[10px] text-white/40">
@@ -428,6 +536,19 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 									onChange={(e) => setChatInput(e.target.value)}
 									disabled={chatLoading}
 								/>
+								<button
+									type="button"
+									onClick={() => void handleWhatDoISay()}
+									disabled={chatLoading || !activeCallSession}
+									title={
+										activeCallSession
+											? "Generate a speakable reply using the current call + your knowledge base"
+											: "Start Call Assist to enable live replies"
+									}
+									className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-[10px] text-white/80 disabled:opacity-50"
+								>
+									What do I say
+								</button>
 								<button
 									type="submit"
 									className="p-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 flex items-center justify-center transition-colors disabled:opacity-50"
