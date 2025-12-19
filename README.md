@@ -32,7 +32,7 @@ brew install node
 
 # Verify installation
 node --version  # Should show v18.x.x or higher
-npm --version
+pnpm --version
 ```
 
 ### Step 2: Clone and Install
@@ -43,11 +43,11 @@ git clone https://github.com/00-Aakash-00/clueless.git
 cd clueless
 
 # Install dependencies
-npm install
+pnpm install
 
 # If you encounter Sharp/Python build errors:
-SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install --ignore-scripts
-npm rebuild sharp
+SHARP_IGNORE_GLOBAL_LIBVIPS=1 pnpm install --ignore-scripts
+pnpm rebuild sharp
 ```
 
 ### Step 3: Configure Environment
@@ -81,10 +81,10 @@ GROQ_TEXT_MODEL=auto
 
 ```bash
 # Development mode (recommended for first run)
-npm start
+pnpm start
 
 # Or build for production
-npm run dist
+pnpm run dist
 # The built .dmg will be in the 'release' folder
 ```
 
@@ -122,7 +122,7 @@ winget install Git.Git
 
 # Restart PowerShell, then verify
 node --version  # Should show v18.x.x or higher
-npm --version
+pnpm --version
 git --version
 ```
 
@@ -139,11 +139,11 @@ git clone https://github.com/00-Aakash-00/clueless.git
 cd clueless
 
 # Install dependencies
-npm install
+pnpm install
 
 # If you encounter build errors, try:
-npm install --ignore-scripts
-npm rebuild sharp
+pnpm install --ignore-scripts
+pnpm rebuild sharp
 ```
 
 ### Step 3: Configure Environment
@@ -175,10 +175,10 @@ GROQ_TEXT_MODEL=auto
 
 ```powershell
 # Development mode (recommended for first run)
-npm start
+pnpm start
 
 # Or build for production
-npm run dist
+pnpm run dist
 # The built .exe installer will be in the 'release' folder
 ```
 
@@ -216,7 +216,7 @@ sudo apt install -y nodejs git
 
 # Verify installation
 node --version
-npm --version
+pnpm --version
 ```
 
 **Fedora:**
@@ -236,11 +236,11 @@ git clone https://github.com/00-Aakash-00/clueless.git
 cd clueless
 
 # Install dependencies
-npm install
+pnpm install
 
 # If you encounter Sharp errors:
-SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install --ignore-scripts
-npm rebuild sharp
+SHARP_IGNORE_GLOBAL_LIBVIPS=1 pnpm install --ignore-scripts
+pnpm rebuild sharp
 ```
 
 ### Step 3: Configure Environment
@@ -256,7 +256,7 @@ echo "SUPERMEMORY_API_KEY=your_supermemory_api_key_here" >> .env # optional
 ### Step 4: Run the App
 
 ```bash
-npm start
+pnpm start
 ```
 
 ### Linux Keyboard Shortcuts
@@ -343,14 +343,14 @@ taskkill /PID <PID> /F  # Replace <PID> with the process ID
 
 ```bash
 # Clean install
-rm -rf node_modules package-lock.json  # macOS/Linux
-rmdir /s /q node_modules & del package-lock.json  # Windows
+rm -rf node_modules pnpm-lock.yaml  # macOS/Linux
+rmdir /s /q node_modules & del pnpm-lock.yaml  # Windows
 
 # Reinstall with prebuilt binaries
-SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install --ignore-scripts  # macOS/Linux
-set SHARP_IGNORE_GLOBAL_LIBVIPS=1 && npm install --ignore-scripts  # Windows
+SHARP_IGNORE_GLOBAL_LIBVIPS=1 pnpm install --ignore-scripts  # macOS/Linux
+set SHARP_IGNORE_GLOBAL_LIBVIPS=1 && pnpm install --ignore-scripts  # Windows
 
-npm rebuild sharp
+pnpm rebuild sharp
 ```
 
 ### Window Not Visible
