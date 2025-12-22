@@ -340,15 +340,28 @@ export class ProcessingHelper {
 	}
 
 	private buildRetrievalQuery(userMessage: string): string {
-		const recentUserMessages = this.chatHistory
-			.filter((m) => m.role === "user")
-			.slice(-2)
-			.map((m) => m.content.trim())
-			.filter(Boolean)
-			.map((m) => (m.length > 400 ? `${m.slice(0, 400)}…` : m));
+		const recentUserMessages: string[] = [];
+		let collected = 0;
 
-		const parts = [...recentUserMessages, userMessage.trim()].filter(Boolean);
-		return parts.join("\n\n");
+		for (let i = this.chatHistory.length - 1; i >= 0 && collected < 2; i -= 1) {
+			const msg = this.chatHistory[i];
+			if (msg.role !== "user") continue;
+			const trimmed = msg.content.trim();
+			if (!trimmed) continue;
+			recentUserMessages.push(
+				trimmed.length > 400 ? `${trimmed.slice(0, 400)}…` : trimmed,
+			);
+			collected += 1;
+		}
+
+		recentUserMessages.reverse();
+
+		const userTrimmed = userMessage.trim();
+		if (userTrimmed) {
+			recentUserMessages.push(userTrimmed);
+		}
+
+		return recentUserMessages.join("\n\n");
 	}
 
 	public async chat(message: string): Promise<string> {

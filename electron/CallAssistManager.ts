@@ -104,9 +104,6 @@ export class CallAssistManager {
 	}
 
 	public getMostRecentQuestion(maxLookback = 24): { speakerLabel: string; text: string } | null {
-		const turns = this.recentTurns.slice(-Math.max(1, Math.round(maxLookback)));
-		if (turns.length === 0) return null;
-
 		const looksLikeQuestion = (text: string): boolean => {
 			const trimmed = text.trim();
 			if (trimmed.length < 6) return false;
@@ -118,17 +115,38 @@ export class CallAssistManager {
 			);
 		};
 
-		const candidates = turns
-			.slice()
-			.reverse()
-			.filter((t) => looksLikeQuestion(t.text));
-		if (candidates.length === 0) return null;
+		const rawLookback = Math.max(1, Math.round(maxLookback));
+		const total = this.recentTurns.length;
+		if (total === 0) return null;
 
-		const preferThem = candidates.find((t) => t.speakerLabel === "Them");
-		if (preferThem) return preferThem;
+		// Match `slice(-rawLookback)` semantics for NaN/Infinity.
+		const startIndex =
+			Number.isFinite(rawLookback) && rawLookback < total ? total - rawLookback : 0;
 
-		const notYou = candidates.find((t) => t.speakerLabel !== "You");
-		return notYou ?? candidates[0] ?? null;
+		let mostRecentQuestion: { speakerLabel: string; text: string } | null = null;
+		let mostRecentNotYou: { speakerLabel: string; text: string } | null = null;
+
+		// Walk backwards once instead of allocating slice/reverse/filter arrays.
+		for (let i = total - 1; i >= startIndex; i -= 1) {
+			const turn = this.recentTurns[i];
+			if (!looksLikeQuestion(turn.text)) continue;
+
+			if (!mostRecentQuestion) {
+				mostRecentQuestion = turn;
+			}
+
+			// Prefer the most recent "Them" question.
+			if (turn.speakerLabel === "Them") {
+				return turn;
+			}
+
+			// Otherwise prefer the most recent question from anyone other than "You".
+			if (!mostRecentNotYou && turn.speakerLabel !== "You") {
+				mostRecentNotYou = turn;
+			}
+		}
+
+		return mostRecentNotYou ?? mostRecentQuestion ?? null;
 	}
 
 	private sendToRenderer(channel: string, payload?: unknown): void {

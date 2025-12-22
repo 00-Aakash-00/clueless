@@ -316,23 +316,37 @@ const CustomizePanel: React.FC<CustomizePanelProps> = ({ onClose }) => {
 	}, [requireSupermemory]);
 
 	const uploadSummary = useMemo(() => {
-		const active = uploadTasks.filter(
-			(task) => task.phase !== "ready" && task.phase !== "failed",
-		);
-		const ready = uploadTasks.filter((task) => task.phase === "ready");
-		const failed = uploadTasks.filter((task) => task.phase === "failed");
-		const uploadingNow = uploadTasks.some(
-			(task) => task.phase === "preparing" || task.phase === "uploading",
-		);
-		const processingIds = uploadTasks
-			.filter(
-				(task) =>
-					task.phase === "processing" &&
-					typeof task.supermemoryId === "string" &&
-					task.supermemoryId.trim().length > 0,
-			)
-			.map((task) => task.supermemoryId as string)
-			.sort();
+		const active: UploadTask[] = [];
+		const ready: UploadTask[] = [];
+		const failed: UploadTask[] = [];
+		const processingIds: string[] = [];
+		let uploadingNow = false;
+
+		for (const task of uploadTasks) {
+			if (task.phase !== "ready" && task.phase !== "failed") {
+				active.push(task);
+			}
+
+			if (task.phase === "ready") {
+				ready.push(task);
+			} else if (task.phase === "failed") {
+				failed.push(task);
+			}
+
+			if (task.phase === "preparing" || task.phase === "uploading") {
+				uploadingNow = true;
+			}
+
+			if (
+				task.phase === "processing" &&
+				typeof task.supermemoryId === "string" &&
+				task.supermemoryId.trim().length > 0
+			) {
+				processingIds.push(task.supermemoryId);
+			}
+		}
+
+		processingIds.sort();
 
 		return {
 			active,

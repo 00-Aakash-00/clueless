@@ -8,7 +8,9 @@ import { v4 as uuidv4 } from "uuid";
 
 export class ScreenshotHelper {
 	private screenshotQueue: string[] = [];
+	private screenshotQueueSet = new Set<string>();
 	private extraScreenshotQueue: string[] = [];
+	private extraScreenshotQueueSet = new Set<string>();
 	private readonly MAX_SCREENSHOTS = 5;
 
 	private readonly screenshotDir: string;
@@ -60,6 +62,7 @@ export class ScreenshotHelper {
 			});
 		});
 		this.screenshotQueue = [];
+		this.screenshotQueueSet.clear();
 
 		// Clear extraScreenshotQueue
 		this.extraScreenshotQueue.forEach((screenshotPath) => {
@@ -72,6 +75,7 @@ export class ScreenshotHelper {
 			});
 		});
 		this.extraScreenshotQueue = [];
+		this.extraScreenshotQueueSet.clear();
 	}
 
 	public async takeScreenshot(
@@ -91,9 +95,11 @@ export class ScreenshotHelper {
 				await screenshot({ filename: screenshotPath });
 
 				this.screenshotQueue.push(screenshotPath);
+				this.screenshotQueueSet.add(screenshotPath);
 				if (this.screenshotQueue.length > this.MAX_SCREENSHOTS) {
 					const removedPath = this.screenshotQueue.shift();
 					if (removedPath) {
+						this.screenshotQueueSet.delete(removedPath);
 						try {
 							await fs.promises.unlink(removedPath);
 						} catch (error) {
@@ -106,9 +112,11 @@ export class ScreenshotHelper {
 				await screenshot({ filename: screenshotPath });
 
 				this.extraScreenshotQueue.push(screenshotPath);
+				this.extraScreenshotQueueSet.add(screenshotPath);
 				if (this.extraScreenshotQueue.length > this.MAX_SCREENSHOTS) {
 					const removedPath = this.extraScreenshotQueue.shift();
 					if (removedPath) {
+						this.extraScreenshotQueueSet.delete(removedPath);
 						try {
 							await fs.promises.unlink(removedPath);
 						} catch (error) {
@@ -143,8 +151,8 @@ export class ScreenshotHelper {
 		filePath: string,
 	): Promise<{ success: boolean; error?: string }> {
 		try {
-			const inMainQueue = this.screenshotQueue.includes(filePath);
-			const inExtraQueue = this.extraScreenshotQueue.includes(filePath);
+			const inMainQueue = this.screenshotQueueSet.has(filePath);
+			const inExtraQueue = this.extraScreenshotQueueSet.has(filePath);
 
 			if (!inMainQueue && !inExtraQueue) {
 				return { success: false, error: "Screenshot not found in queue" };
@@ -161,11 +169,13 @@ export class ScreenshotHelper {
 			}
 
 			if (inMainQueue) {
+				this.screenshotQueueSet.delete(filePath);
 				this.screenshotQueue = this.screenshotQueue.filter(
 					(p) => p !== filePath,
 				);
 			}
 			if (inExtraQueue) {
+				this.extraScreenshotQueueSet.delete(filePath);
 				this.extraScreenshotQueue = this.extraScreenshotQueue.filter(
 					(p) => p !== filePath,
 				);

@@ -139,6 +139,17 @@ type ProcessingDocumentStatus =
 	| "done"
 	| "failed";
 
+const PROCESSING_DOCUMENT_STATUS_SET = new Set<ProcessingDocumentStatus>([
+	"unknown",
+	"queued",
+	"extracting",
+	"chunking",
+	"embedding",
+	"indexing",
+	"done",
+	"failed",
+]);
+
 type ProcessingDocument = {
 	id: string;
 	status: ProcessingDocumentStatus;
@@ -1018,54 +1029,45 @@ export class SupermemoryHelper {
 		);
 
 		const rawDocuments = Array.isArray(raw.documents) ? raw.documents : [];
-		const documents: ProcessingDocument[] = rawDocuments
-			.map((doc) => {
-				const id = typeof doc.id === "string" ? doc.id : "";
-				if (!id) return null;
+		const documents: ProcessingDocument[] = [];
+		for (const doc of rawDocuments) {
+			const id = typeof doc.id === "string" ? doc.id : "";
+			if (!id) continue;
 
-				const rawStatus = typeof doc.status === "string" ? doc.status : "unknown";
-				const status: ProcessingDocumentStatus = [
-					"unknown",
-					"queued",
-					"extracting",
-					"chunking",
-					"embedding",
-					"indexing",
-					"done",
-					"failed",
-				].includes(rawStatus)
-					? (rawStatus as ProcessingDocumentStatus)
-					: "unknown";
+			const rawStatus = typeof doc.status === "string" ? doc.status : "unknown";
+			const status: ProcessingDocumentStatus = PROCESSING_DOCUMENT_STATUS_SET.has(
+				rawStatus as ProcessingDocumentStatus,
+			)
+				? (rawStatus as ProcessingDocumentStatus)
+				: "unknown";
 
-				const containerTags =
-					Array.isArray(doc.containerTags) &&
-					doc.containerTags.every((t) => typeof t === "string")
-						? (doc.containerTags as string[])
-						: Array.isArray(doc.container_tags) &&
-								doc.container_tags.every((t) => typeof t === "string")
-							? (doc.container_tags as string[])
-							: undefined;
+			const containerTags =
+				Array.isArray(doc.containerTags) && doc.containerTags.every((t) => typeof t === "string")
+					? (doc.containerTags as string[])
+					: Array.isArray(doc.container_tags) &&
+							doc.container_tags.every((t) => typeof t === "string")
+						? (doc.container_tags as string[])
+						: undefined;
 
-				const metadata =
-					doc.metadata && typeof doc.metadata === "object" && !Array.isArray(doc.metadata)
-						? (doc.metadata as Record<string, unknown>)
+			const metadata =
+				doc.metadata && typeof doc.metadata === "object" && !Array.isArray(doc.metadata)
+					? (doc.metadata as Record<string, unknown>)
+					: null;
+
+			const titleRaw =
+				typeof doc.title === "string"
+					? doc.title
+					: typeof metadata?.filename === "string"
+						? metadata.filename
 						: null;
 
-				const titleRaw =
-					typeof doc.title === "string"
-						? doc.title
-						: typeof metadata?.filename === "string"
-							? metadata.filename
-							: null;
-
-				return {
-					id,
-					status,
-					title: titleRaw,
-					containerTags,
-				} as ProcessingDocument;
-			})
-			.filter((doc): doc is ProcessingDocument => doc !== null);
+			documents.push({
+				id,
+				status,
+				title: titleRaw,
+				containerTags,
+			});
+		}
 
 		const totalCount =
 			typeof raw.totalCount === "number"

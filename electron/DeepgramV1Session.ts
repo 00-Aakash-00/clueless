@@ -77,7 +77,8 @@ export class DeepgramV1Session {
 	private keepAliveTimer: NodeJS.Timeout | null = null;
 	private lastAudioSentAt = 0;
 
-	private readonly audioQueue: Buffer[] = [];
+	private audioQueue: Buffer[] = [];
+	private audioQueueStart = 0;
 	private readonly maxQueuedFrames = 250;
 
 	private finalTextByChannel: string[] = [];
@@ -236,8 +237,11 @@ export class DeepgramV1Session {
 	private flushAudioQueue(): void {
 		const ws = this.ws;
 		if (!ws || ws.readyState !== WebSocket.OPEN) return;
-		while (this.audioQueue.length > 0) {
-			const frame = this.audioQueue.shift();
+
+		let index = this.audioQueueStart;
+		while (index < this.audioQueue.length) {
+			const frame = this.audioQueue[index];
+			index += 1;
 			if (!frame) continue;
 			try {
 				ws.send(frame);
@@ -248,6 +252,20 @@ export class DeepgramV1Session {
 				break;
 			}
 		}
+
+		// Drop frames we attempted to send (including the one that failed, matching shift() semantics).
+		this.audioQueueStart = index;
+		if (this.audioQueueStart >= this.audioQueue.length) {
+			this.audioQueue = [];
+			this.audioQueueStart = 0;
+			return;
+		}
+
+		// Compact remaining frames to keep memory bounded.
+		if (this.audioQueueStart > 0) {
+			this.audioQueue = this.audioQueue.slice(this.audioQueueStart);
+			this.audioQueueStart = 0;
+		}
 	}
 
 	public sendAudio(frame: Buffer): void {
@@ -255,8 +273,19 @@ export class DeepgramV1Session {
 		const ws = this.ws;
 		if (!ws || ws.readyState !== WebSocket.OPEN) {
 			this.audioQueue.push(frame);
-			if (this.audioQueue.length > this.maxQueuedFrames) {
-				this.audioQueue.splice(0, this.audioQueue.length - this.maxQueuedFrames);
+			const pending = this.audioQueue.length - this.audioQueueStart;
+			if (pending > this.maxQueuedFrames) {
+				this.audioQueueStart += pending - this.maxQueuedFrames;
+			}
+
+			// Periodically compact to avoid unbounded growth from a moving start index.
+			if (
+				this.audioQueueStart > 0 &&
+				this.audioQueueStart >= 64 &&
+				this.audioQueueStart >= this.audioQueue.length / 2
+			) {
+				this.audioQueue = this.audioQueue.slice(this.audioQueueStart);
+				this.audioQueueStart = 0;
 			}
 			return;
 		}
