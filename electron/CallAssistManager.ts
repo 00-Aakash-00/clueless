@@ -217,7 +217,7 @@ export class CallAssistManager {
 			return speakerId !== this.diarizeYouSpeakerId;
 		};
 
-		this.session = new DeepgramV1Session(
+		const session = new DeepgramV1Session(
 			{
 				apiKey,
 				sampleRate,
@@ -294,10 +294,33 @@ export class CallAssistManager {
 			},
 		);
 
-		await this.session.start();
-		this.sessionInfo = { sessionId, recordingPath, startedAt: Date.now() };
-		this.sendToRenderer("call-assist-started", this.sessionInfo);
-		return this.sessionInfo;
+		this.session = session;
+
+		try {
+			await session.start();
+			this.sessionInfo = { sessionId, recordingPath, startedAt: Date.now() };
+			this.sendToRenderer("call-assist-started", this.sessionInfo);
+			return this.sessionInfo;
+		} catch (error) {
+			try {
+				await session.stop();
+			} catch {
+				// Ignore.
+			}
+			try {
+				this.wavWriter?.close();
+			} catch {
+				// Ignore.
+			}
+
+			if (this.session === session) this.session = null;
+			this.wavWriter = null;
+			this.sessionInfo = null;
+			this.recentTurns = [];
+			this.suggestionInFlight = false;
+			this.pendingSuggestion = null;
+			throw error;
+		}
 	}
 
 	private shouldTriggerSuggestion(text: string): boolean {
@@ -339,16 +362,21 @@ export class CallAssistManager {
 				transcriptTail,
 			});
 			if (!suggestion?.trim()) return;
+			const active = this.sessionInfo;
+			if (!active || active.sessionId !== sessionId) return;
 			this.sendToRenderer("call-assist-suggestion", {
 				sessionId,
 				utteranceId: params.utteranceId,
 				suggestion,
 			} satisfies CallAssistSuggestionEvent);
 		} catch (error) {
-			this.sendToRenderer("call-assist-error", {
-				sessionId,
-				message: error instanceof Error ? error.message : String(error),
-			});
+			const active = this.sessionInfo;
+			if (active && active.sessionId === sessionId) {
+				this.sendToRenderer("call-assist-error", {
+					sessionId,
+					message: error instanceof Error ? error.message : String(error),
+				});
+			}
 		} finally {
 			this.suggestionInFlight = false;
 			const pending = this.pendingSuggestion;
