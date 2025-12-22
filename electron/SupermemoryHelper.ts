@@ -282,6 +282,7 @@ export class SupermemoryHelper {
 	private readonly aboutYouFilePath: string;
 	private readonly configFilePath: string;
 	private readonly requestTimeoutMs = 30_000;
+	private readonly uploadRequestTimeoutMs = 120_000;
 
 	// In-memory customization state
 	private config: CustomizeConfig = {
@@ -341,13 +342,14 @@ export class SupermemoryHelper {
 		endpoint: string,
 		init: RequestInit,
 		expectedStatus: number | number[] = 200,
+		timeoutMs: number = this.requestTimeoutMs,
 	): Promise<string> {
 		const expected = Array.isArray(expectedStatus)
 			? expectedStatus
 			: [expectedStatus];
 
 		const controller = new AbortController();
-		const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+		const timeout = setTimeout(() => controller.abort(), timeoutMs);
 		try {
 			const response = await fetch(`${this.baseUrl}${endpoint}`, {
 				...init,
@@ -369,8 +371,9 @@ export class SupermemoryHelper {
 		endpoint: string,
 		init: RequestInit,
 		expectedStatus: number | number[] = 200,
+		timeoutMs?: number,
 	): Promise<T> {
-		const text = await this.requestText(endpoint, init, expectedStatus);
+		const text = await this.requestText(endpoint, init, expectedStatus, timeoutMs);
 		if (!text) return {} as T;
 		return JSON.parse(text) as T;
 	}
@@ -765,6 +768,7 @@ export class SupermemoryHelper {
 				body: formData,
 			},
 			200,
+			this.uploadRequestTimeoutMs,
 		);
 		return data;
 	}
