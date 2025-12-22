@@ -910,8 +910,17 @@ export class SupermemoryHelper {
 				`[SupermemoryHelper] Search returned ${data.results.length} results (timing: ${data.timing}ms)`,
 			);
 			if (data.results.length > 0) {
+				const top = data.results[0] as Partial<SearchResult>;
+				const similarity =
+					typeof top.similarity === "number" && Number.isFinite(top.similarity)
+						? top.similarity.toFixed(3)
+						: "n/a";
+				const memoryPreview =
+					typeof top.memory === "string"
+						? `${top.memory.substring(0, 100)}${top.memory.length > 100 ? "..." : ""}`
+						: "";
 				console.log(
-					`[SupermemoryHelper] Top result similarity: ${data.results[0].similarity.toFixed(3)}, preview: "${data.results[0].memory?.substring(0, 100)}..."`,
+					`[SupermemoryHelper] Top result similarity: ${similarity}, preview: "${memoryPreview}"`,
 				);
 			}
 			return data;
