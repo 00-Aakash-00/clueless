@@ -17,12 +17,14 @@ import {
 } from "../components/ui/toast";
 
 interface QueueProps {
-	setView: React.Dispatch<
-		React.SetStateAction<"queue" | "solutions">
-	>;
+	pendingSolutionError?: string | null;
+	onConsumeSolutionError?: () => void;
 }
 
-const Queue: React.FC<QueueProps> = ({ setView }) => {
+const Queue: React.FC<QueueProps> = ({
+	pendingSolutionError,
+	onConsumeSolutionError,
+}) => {
 	const [toastOpen, setToastOpen] = useState(false);
 	const [toastMessage, setToastMessage] = useState<ToastMessage>({
 		title: "",
@@ -67,6 +69,12 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 		},
 		[],
 	);
+
+	useEffect(() => {
+		if (!pendingSolutionError) return;
+		showToast("Processing Failed", pendingSolutionError, "error");
+		onConsumeSolutionError?.();
+	}, [onConsumeSolutionError, pendingSolutionError, showToast]);
 
 	const { data: screenshots = [], refetch } = useQuery<
 		Array<{ path: string; preview: string }>,
@@ -218,15 +226,6 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 		const cleanupFunctions = [
 			window.electronAPI.onScreenshotTaken(() => refetch()),
 			window.electronAPI.onResetView(() => refetch()),
-			window.electronAPI.onSolutionError((error: string) => {
-				showToast(
-					"Processing Failed",
-					"There was an error processing your screenshots.",
-					"error",
-				);
-				setView("queue");
-				console.error("Processing error:", error);
-			}),
 			window.electronAPI.onProcessingNoScreenshots(() => {
 				showToast(
 					"No Screenshots",
@@ -235,6 +234,10 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 				);
 			}),
 			window.electronAPI.onFocusChat(() => {
+				setIsCallAssistOpen(false);
+				setIsSettingsOpen(false);
+				setIsCustomizeOpen(false);
+				setIsHelpOpen(false);
 				setIsChatOpen(true);
 				// Use setTimeout to ensure chat is rendered before focusing
 				setTimeout(() => {
@@ -249,7 +252,7 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 				cleanup();
 			}
 		};
-	}, [refetch, setView, showToast]);
+	}, [refetch, showToast]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -334,48 +337,70 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 		};
 	}, [refetch]);
 
-		const handleChatToggle = () => {
-			setIsChatOpen(!isChatOpen);
-		};
+			const handleChatToggle = () => {
+				setIsChatOpen((open) => {
+					const next = !open;
+					if (next) {
+						setIsCallAssistOpen(false);
+						setIsSettingsOpen(false);
+						setIsCustomizeOpen(false);
+						setIsHelpOpen(false);
+					}
+					return next;
+				});
+			};
 
-		const handleCallAssistToggle = () => {
-			setIsCallAssistOpen(!isCallAssistOpen);
-			if (!isCallAssistOpen) {
-				setIsSettingsOpen(false);
-				setIsCustomizeOpen(false);
-				setIsHelpOpen(false);
-			}
-		};
+			const handleCallAssistToggle = () => {
+				setIsCallAssistOpen((open) => {
+					const next = !open;
+					if (next) {
+						setIsChatOpen(false);
+						setIsSettingsOpen(false);
+						setIsCustomizeOpen(false);
+						setIsHelpOpen(false);
+					}
+					return next;
+				});
+			};
 
-		const handleSettingsToggle = () => {
-			setIsSettingsOpen(!isSettingsOpen);
-			// Close other panels when opening settings
-			if (!isSettingsOpen) {
-				setIsCustomizeOpen(false);
-				setIsHelpOpen(false);
-				setIsCallAssistOpen(false);
-			}
-		};
+			const handleSettingsToggle = () => {
+				setIsSettingsOpen((open) => {
+					const next = !open;
+					if (next) {
+						setIsChatOpen(false);
+						setIsCustomizeOpen(false);
+						setIsHelpOpen(false);
+						setIsCallAssistOpen(false);
+					}
+					return next;
+				});
+			};
 
-		const handleCustomizeToggle = () => {
-			setIsCustomizeOpen(!isCustomizeOpen);
-			// Close other panels when opening customize
-			if (!isCustomizeOpen) {
-				setIsSettingsOpen(false);
-				setIsHelpOpen(false);
-				setIsCallAssistOpen(false);
-			}
-		};
+			const handleCustomizeToggle = () => {
+				setIsCustomizeOpen((open) => {
+					const next = !open;
+					if (next) {
+						setIsChatOpen(false);
+						setIsSettingsOpen(false);
+						setIsHelpOpen(false);
+						setIsCallAssistOpen(false);
+					}
+					return next;
+				});
+			};
 
-		const handleHelpToggle = () => {
-			setIsHelpOpen(!isHelpOpen);
-			// Close other panels when opening help
-			if (!isHelpOpen) {
-				setIsSettingsOpen(false);
-				setIsCustomizeOpen(false);
-				setIsCallAssistOpen(false);
-			}
-		};
+			const handleHelpToggle = () => {
+				setIsHelpOpen((open) => {
+					const next = !open;
+					if (next) {
+						setIsChatOpen(false);
+						setIsSettingsOpen(false);
+						setIsCustomizeOpen(false);
+						setIsCallAssistOpen(false);
+					}
+					return next;
+				});
+			};
 
 	const handleModelChange = (model: string) => {
 		setCurrentModel({ provider: "groq", model });

@@ -342,9 +342,17 @@ export class DeepgramV1Session {
 	}
 
 	private parseChannelIndex(message: Record<string, unknown>): number {
+		const max = Math.max(1, Math.round(this.config.channels || 1)) - 1;
+		const clamp = (value: number): number => {
+			if (!Number.isFinite(value)) return 0;
+			const normalized = Math.floor(value);
+			return Math.max(0, Math.min(max, normalized));
+		};
+
 		const channelIndexRaw = message.channel_index;
+		if (typeof channelIndexRaw === "number") return clamp(channelIndexRaw);
 		if (Array.isArray(channelIndexRaw) && typeof channelIndexRaw[0] === "number") {
-			return channelIndexRaw[0];
+			return clamp(channelIndexRaw[0]);
 		}
 		return 0;
 	}
@@ -555,16 +563,34 @@ export class DeepgramV1Session {
 
 	private handleUtteranceEndMessage(message: Record<string, unknown>): void {
 		const channelsRaw = message.channel;
-		const channels =
-			Array.isArray(channelsRaw) && channelsRaw.every((c) => typeof c === "number")
-				? (channelsRaw as number[])
-				: [this.parseChannelIndex(message)];
+		const channels = (() => {
+			if (
+				Array.isArray(channelsRaw) &&
+				channelsRaw.every((c) => typeof c === "number" && Number.isFinite(c))
+			) {
+				return channelsRaw as number[];
+			}
+			if (typeof channelsRaw === "number" && Number.isFinite(channelsRaw)) {
+				return [channelsRaw];
+			}
+			return [this.parseChannelIndex(message)];
+		})();
 		const lastWordEnd =
 			typeof message.last_word_end === "number"
 				? Math.round(message.last_word_end * 1000)
 				: null;
 
-		for (const channelIndex of channels) {
+		const max = Math.max(1, Math.round(this.config.channels || 1)) - 1;
+		const normalizedChannels = Array.from(
+			new Set(
+				channels.map((c) => {
+					if (!Number.isFinite(c)) return 0;
+					return Math.max(0, Math.min(max, Math.floor(c)));
+				}),
+			),
+		);
+
+		for (const channelIndex of normalizedChannels) {
 			this.finalizeUtterance({
 				channelIndex,
 				words: this.finalWordsByChannel[channelIndex] ?? [],

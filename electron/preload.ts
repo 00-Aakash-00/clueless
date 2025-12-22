@@ -206,6 +206,7 @@ interface ElectronAPI {
 		height: number;
 	}) => Promise<void>;
 	getScreenshots: () => Promise<Array<{ path: string; preview: string }>>;
+	getCurrentView: () => Promise<"queue" | "solutions">;
 	deleteScreenshot: (
 		path: string,
 	) => Promise<{ success: boolean; error?: string }>;
@@ -458,6 +459,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		ipcRenderer.invoke("update-content-dimensions", dimensions),
 	takeScreenshot: () => ipcRenderer.invoke("take-screenshot"),
 	getScreenshots: () => ipcRenderer.invoke("get-screenshots"),
+	getCurrentView: () => ipcRenderer.invoke("get-current-view"),
 	deleteScreenshot: (path: string) =>
 		ipcRenderer.invoke("delete-screenshot", path),
 

@@ -203,6 +203,9 @@ export class AppState {
 		// Clear chat/session context
 		this.processingHelper.resetConversation();
 
+		// Reset debug state
+		this.hasDebugged = false;
+
 		// Reset view to initial state
 		this.setView("queue");
 	}

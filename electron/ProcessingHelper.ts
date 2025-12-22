@@ -110,16 +110,16 @@ export class ProcessingHelper {
 				return;
 			}
 
-			const allPaths = this.appState.getScreenshotHelper().getScreenshotQueue();
+				const allPaths = this.appState.getScreenshotHelper().getScreenshotQueue();
 
-			// Handle screenshots as batch image analysis (processes all screenshots, up to 5)
-			mainWindow.webContents.send(
-				this.appState.PROCESSING_EVENTS.INITIAL_START,
-			);
-			this.appState.setView("solutions");
-			this.currentProcessingAbortController = new AbortController();
-			const signal = this.currentProcessingAbortController.signal;
-			try {
+				// Handle screenshots as batch image analysis (processes all screenshots, up to 5)
+				this.appState.setView("solutions");
+				mainWindow.webContents.send(
+					this.appState.PROCESSING_EVENTS.INITIAL_START,
+				);
+				this.currentProcessingAbortController = new AbortController();
+				const signal = this.currentProcessingAbortController.signal;
+				try {
 				// Use extractProblemFromImages for batch processing all screenshots
 				const extractedProblem = await this.llmHelper.extractProblemFromImages(
 					allPaths,
@@ -217,15 +217,14 @@ export class ProcessingHelper {
 
 			// Early guard: Check prerequisites BEFORE starting debug
 			const problemInfo = this.appState.getProblemInfo();
-			const oldCode = this.appState.getCurrentSolutionCode();
-			if (!problemInfo || !oldCode) {
-				console.log("Missing prerequisites for debug, resetting to queue");
-				this.appState.setView("queue");
-				mainWindow.webContents.send(
-					this.appState.PROCESSING_EVENTS.DEBUG_ERROR,
-					"No solution to debug. Please take screenshots and process first.",
-				);
-				return;
+				const oldCode = this.appState.getCurrentSolutionCode();
+				if (!problemInfo || !oldCode) {
+					console.log("Missing prerequisites for debug");
+					mainWindow.webContents.send(
+						this.appState.PROCESSING_EVENTS.DEBUG_ERROR,
+						"No solution to debug. Please take screenshots and process first.",
+					);
+					return;
 			}
 
 			mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.DEBUG_START);
@@ -237,36 +236,44 @@ export class ProcessingHelper {
 				await this.prepareMemoryContext(problemInfo.problem_statement || "debugging code solution");
 
 				// Debug the solution using vision model
-				const debugResult = await this.llmHelper.debugSolutionWithImages(
-					problemInfo,
-					oldCode,
-					extraScreenshotQueue,
-					debugSignal,
-				);
-
-				this.appState.setHasDebugged(true);
-				if (debugResult?.solution?.code) {
-					this.addToChatHistory(
-						"assistant",
-						`[Debugged solution]\n\n${debugResult.solution.code}`,
+					const debugResult = await this.llmHelper.debugSolutionWithImages(
+						problemInfo,
+						oldCode,
+						extraScreenshotQueue,
+						debugSignal,
 					);
-				}
 
-				// Send data in the format the frontend expects: { solution: { old_code, new_code, thoughts, time_complexity, space_complexity } }
-				// Solutions.tsx accesses data.solution, then sets it to queryClient cache
-				// Debug.tsx reads from cache expecting { old_code, new_code, thoughts, time_complexity, space_complexity }
-				mainWindow.webContents.send(
-					this.appState.PROCESSING_EVENTS.DEBUG_SUCCESS,
-					{
-						solution: {
-							old_code: oldCode,
-							new_code: debugResult.solution.code,
-							thoughts: debugResult.solution.suggested_responses || [],
-							time_complexity: "N/A",
-							space_complexity: "N/A",
+					this.appState.setHasDebugged(true);
+					const debuggedCode = debugResult?.solution?.code;
+					if (typeof debuggedCode !== "string" || !debuggedCode.trim()) {
+						throw new Error("Debugging returned an empty solution.");
+					}
+
+					// Persist the latest code so subsequent debug runs diff correctly.
+					this.appState.setCurrentSolutionCode(debuggedCode);
+
+					if (debuggedCode) {
+						this.addToChatHistory(
+							"assistant",
+							`[Debugged solution]\n\n${debuggedCode}`,
+						);
+					}
+
+					// Send data in the format the frontend expects: { solution: { old_code, new_code, thoughts, time_complexity, space_complexity } }
+					// Solutions.tsx accesses data.solution, then sets it to queryClient cache
+					// Debug.tsx reads from cache expecting { old_code, new_code, thoughts, time_complexity, space_complexity }
+					mainWindow.webContents.send(
+						this.appState.PROCESSING_EVENTS.DEBUG_SUCCESS,
+						{
+							solution: {
+								old_code: oldCode,
+								new_code: debuggedCode,
+								thoughts: debugResult.solution.suggested_responses || [],
+								time_complexity: "N/A",
+								space_complexity: "N/A",
+							},
 						},
-					},
-				);
+					);
 			} catch (error: unknown) {
 				console.error("Debug processing error:", error);
 

@@ -204,6 +204,7 @@ declare global {
 			height: number;
 		}) => Promise<void>;
 		getScreenshots: () => Promise<Array<{ path: string; preview: string }>>;
+		getCurrentView: () => Promise<"queue" | "solutions">;
 		deleteScreenshot: (
 			path: string,
 		) => Promise<{ success: boolean; error?: string }>;

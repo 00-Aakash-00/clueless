@@ -18,6 +18,17 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
 	onCustomizeToggle,
 	onHelpToggle,
 }) => {
+	const isMac =
+		typeof navigator !== "undefined" &&
+		/Mac|iPhone|iPad|iPod/.test(navigator.platform);
+	const modKey = isMac ? "⌘" : "Ctrl";
+
+	const KeyCap: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+		<span className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+			{children}
+		</span>
+	);
+
 	return (
 		<div>
 			<div className="text-xs text-white/90 bg-black/60 backdrop-blur-xl border border-white/20 rounded-2xl py-2 px-4 flex items-center gap-4 draggable-area whitespace-nowrap">
@@ -32,12 +43,8 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
 				<div className="flex items-center gap-2">
 					<span className="text-[11px] leading-none">Show/Hide</span>
 					<div className="flex gap-1">
-						<span className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
-							⌘
-						</span>
-						<span className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
-							B
-						</span>
+						<KeyCap>{modKey}</KeyCap>
+						<KeyCap>B</KeyCap>
 					</div>
 				</div>
 
@@ -46,12 +53,8 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
 					<div className="flex items-center gap-2">
 						<span className="text-[11px] leading-none">Solve</span>
 						<div className="flex gap-1">
-							<span className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
-								⌘
-							</span>
-							<span className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
-								↵
-							</span>
+							<KeyCap>{modKey}</KeyCap>
+							<KeyCap>↵</KeyCap>
 						</div>
 					</div>
 				)}

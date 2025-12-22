@@ -76,6 +76,10 @@ export function initializeIpcHandlers(appState: AppState): void {
 		}
 	});
 
+	ipcMain.handle("get-current-view", async () => {
+		return appState.getView();
+	});
+
 	ipcMain.handle("toggle-window", async () => {
 		appState.toggleMainWindow();
 	});

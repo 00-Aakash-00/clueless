@@ -9,6 +9,17 @@ interface SolutionCommandsProps {
 const SolutionCommands: React.FC<SolutionCommandsProps> = ({
 	extraScreenshots,
 }) => {
+	const isMac =
+		typeof navigator !== "undefined" &&
+		/Mac|iPhone|iPad|iPod/.test(navigator.platform);
+	const modKey = isMac ? "⌘" : "Ctrl";
+
+	const KeyCap: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+		<span className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+			{children}
+		</span>
+	);
+
 	return (
 		<div>
 				<div className="pt-2 w-fit">
@@ -24,12 +35,8 @@ const SolutionCommands: React.FC<SolutionCommandsProps> = ({
 					<div className="flex items-center gap-2 whitespace-nowrap">
 						<span className="text-[11px] leading-none">Show/Hide</span>
 						<div className="flex gap-1">
-							<span className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
-								⌘
-							</span>
-							<span className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
-								B
-							</span>
+							<KeyCap>{modKey}</KeyCap>
+							<KeyCap>B</KeyCap>
 						</div>
 					</div>
 
@@ -41,24 +48,17 @@ const SolutionCommands: React.FC<SolutionCommandsProps> = ({
 								: "Screenshot"}
 						</span>
 						<div className="flex gap-1">
-							<span className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
-								⌘
-							</span>
-							<span className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
-								H
-							</span>
+							<KeyCap>{modKey}</KeyCap>
+							{isMac && <KeyCap>⇧</KeyCap>}
+							<KeyCap>H</KeyCap>
 						</div>
 					</div>
 					{extraScreenshots.length > 0 && (
 						<div className="flex items-center gap-2 whitespace-nowrap">
 							<span className="text-[11px] leading-none">Debug</span>
 							<div className="flex gap-1">
-								<span className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
-									⌘
-								</span>
-								<span className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
-									↵
-								</span>
+								<KeyCap>{modKey}</KeyCap>
+								<KeyCap>↵</KeyCap>
 							</div>
 						</div>
 					)}
@@ -67,12 +67,8 @@ const SolutionCommands: React.FC<SolutionCommandsProps> = ({
 					<div className="flex items-center gap-2 whitespace-nowrap">
 						<span className="text-[11px] leading-none">Start over</span>
 						<div className="flex gap-1">
-							<span className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
-								⌘
-							</span>
-							<span className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
-								R
-							</span>
+							<KeyCap>{modKey}</KeyCap>
+							<KeyCap>R</KeyCap>
 						</div>
 					</div>
 

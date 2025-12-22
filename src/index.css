@@ -91,13 +91,7 @@
 
 .draggable-area {
 	-webkit-app-region: drag;
-	height: 32px;
-	width: 100%;
-	background: transparent;
 	cursor: move;
-	position: relative;
-	z-index: 1000;
-	border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
 .drag-region {
@@ -124,13 +118,6 @@ textarea,
 .liquid-glass.draggable-area button {
 	-webkit-app-region: no-drag;
 	cursor: pointer;
-}
-
-/* Add visual feedback for draggable area */
-.draggable-area:hover {
-	background: rgba(255, 255, 255, 0.1);
-	backdrop-filter: blur(2px);
-	-webkit-backdrop-filter: blur(2px);
 }
 
 /* Dark theme liquid glass variant */

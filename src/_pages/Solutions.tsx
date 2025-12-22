@@ -122,11 +122,8 @@ export const ComplexitySection = ({
 );
 
 interface SolutionsProps {
-	setView: React.Dispatch<
-		React.SetStateAction<"queue" | "solutions">
-	>;
 }
-const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
+const Solutions: React.FC<SolutionsProps> = () => {
 	const queryClient = useQueryClient();
 	const contentRef = useRef<HTMLDivElement>(null);
 
@@ -243,53 +240,6 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 					setTimeComplexityData(null);
 					setSpaceComplexityData(null);
 				}),
-				//if there was an error processing the initial solution
-				window.electronAPI.onSolutionError((error: string) => {
-					showToast(
-						"Processing Failed",
-						"There was an error processing your screenshots.",
-						"error",
-					);
-				// Reset solutions in the cache (even though this shouldn't ever happen) and complexities to previous states
-				const solution = queryClient.getQueryData(["solution"]) as {
-					code: string;
-					thoughts: string[];
-					time_complexity: string;
-					space_complexity: string;
-				} | null;
-					if (!solution) {
-						// If there's nothing in cache to restore, go back to queue.
-						setView("queue");
-					}
-				setSolutionData(solution?.code || null);
-				setThoughtsData(solution?.thoughts || null);
-				setTimeComplexityData(solution?.time_complexity || null);
-				setSpaceComplexityData(solution?.space_complexity || null);
-				console.error("Processing error:", error);
-			}),
-			//when the initial solution is generated, we'll set the solution data to that
-			window.electronAPI.onSolutionSuccess((data) => {
-				if (!data?.solution) {
-					console.warn("Received empty or invalid solution data");
-					return;
-				}
-
-				// Map backend fields to frontend expected structure
-				// Backend returns: code, problem_statement, context, suggested_responses, reasoning
-				// Frontend expects: code, thoughts, time_complexity, space_complexity
-				const solutionData = {
-					code: data.solution.code,
-					thoughts: data.solution.suggested_responses || [], // Map suggested_responses to thoughts
-					time_complexity: "N/A", // Not provided by current backend
-					space_complexity: "N/A", // Not provided by current backend
-				};
-
-				queryClient.setQueryData(["solution"], solutionData);
-				setSolutionData(solutionData.code || null);
-				setThoughtsData(solutionData.thoughts || null);
-				setTimeComplexityData(solutionData.time_complexity || null);
-				setSpaceComplexityData(solutionData.space_complexity || null);
-			}),
 
 			//########################################################
 			//DEBUG EVENTS
@@ -332,7 +282,6 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 		queryClient.removeQueries,
 		queryClient.setQueryData,
 		refetch,
-		setView,
 		showToast,
 	]);
 

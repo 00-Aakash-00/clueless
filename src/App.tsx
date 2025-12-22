@@ -17,7 +17,26 @@ const queryClient = new QueryClient({
 
 const App: React.FC = () => {
 	const [view, setView] = useState<"queue" | "solutions">("queue");
+	const [pendingSolutionError, setPendingSolutionError] = useState<string | null>(
+		null,
+	);
 	const containerRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		let cancelled = false;
+		window.electronAPI
+			.getCurrentView()
+			.then((currentView) => {
+				if (cancelled) return;
+				setView(currentView);
+			})
+			.catch(() => {
+				// ignore
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
 	useEffect(() => {
 		if (!containerRef.current) return;
@@ -60,10 +79,29 @@ const App: React.FC = () => {
 	useEffect(() => {
 		const cleanupFunctions = [
 			window.electronAPI.onSolutionStart(() => {
+				setPendingSolutionError(null);
 				setView("solutions");
+			}),
+			window.electronAPI.onSolutionSuccess((data: SolutionSuccessData) => {
+				if (!data?.solution) return;
+				const solutionData = {
+					code: data.solution.code,
+					thoughts: data.solution.suggested_responses || [],
+					time_complexity: "N/A",
+					space_complexity: "N/A",
+				};
+				queryClient.setQueryData(["solution"], solutionData);
+			}),
+			window.electronAPI.onSolutionError((error: string) => {
+				setPendingSolutionError(error);
+				queryClient.removeQueries(["solution"]);
+				queryClient.removeQueries(["new_solution"]);
+				queryClient.removeQueries(["problem_statement"]);
+				setView("queue");
 			}),
 
 			window.electronAPI.onUnauthorized(() => {
+				setPendingSolutionError(null);
 				queryClient.removeQueries(["screenshots"]);
 				queryClient.removeQueries(["extras"]);
 				queryClient.removeQueries(["solution"]);
@@ -73,6 +111,7 @@ const App: React.FC = () => {
 			}),
 			// Update this reset handler
 			window.electronAPI.onResetView(() => {
+				setPendingSolutionError(null);
 				queryClient.removeQueries(["screenshots"]);
 				queryClient.removeQueries(["extras"]);
 				queryClient.removeQueries(["solution"]);
@@ -96,9 +135,12 @@ const App: React.FC = () => {
 			<QueryClientProvider client={queryClient}>
 				<ToastProvider>
 					{view === "queue" ? (
-						<Queue setView={setView} />
+						<Queue
+							pendingSolutionError={pendingSolutionError}
+							onConsumeSolutionError={() => setPendingSolutionError(null)}
+						/>
 					) : view === "solutions" ? (
-						<Solutions setView={setView} />
+						<Solutions />
 					) : null}
 					<ToastViewport />
 				</ToastProvider>
